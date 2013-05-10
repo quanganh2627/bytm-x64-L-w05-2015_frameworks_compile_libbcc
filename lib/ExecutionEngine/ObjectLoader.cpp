@@ -23,6 +23,7 @@
 #include "bcc/Support/Log.h"
 
 #include "ELFObjectLoaderImpl.h"
+#include "USCObjectLoaderImpl.h"
 
 using namespace bcc;
 
@@ -49,7 +50,15 @@ ObjectLoader *ObjectLoader::Load(void *pMemStart, size_t pMemSize,
   // Currently, only ELF object loader is supported. Therefore, there's no codes
   // to detect the object file type and to select the one appropriated. Directly
   // try out the ELF object loader.
-  result->mImpl = new (std::nothrow) ELFObjectLoaderImpl();
+  if (memcmp(pMemStart, "\x7f" "ELF", 4) == 0)
+    result->mImpl = new (std::nothrow) ELFObjectLoaderImpl();
+  else if(memcmp(pMemStart, "RSC ", 4) == 0)
+    result->mImpl = new (std::nothrow) USCObjectLoaderImpl();
+  else {
+    ALOGE("Could not match magic number of object to loader");
+    result->mImpl = NULL;
+  }
+
   if (result->mImpl == NULL) {
     ALOGE("Out of memory when create ELF object loader for %s", pName);
     goto bail;

@@ -89,6 +89,9 @@ public:
   inline void *getSymbolAddress(const char *pName) const
   { return mLoader->getSymbolAddress(pName); }
 
+  size_t retrieveObjFileSize() const;
+  bool   retrieveObjFile(void *pDst, size_t uDataLen);
+
   bool syncInfo(bool pForce = false);
 
   // Disassemble and dump the relocated functions to the pOutput.
