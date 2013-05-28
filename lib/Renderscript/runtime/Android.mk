@@ -49,7 +49,9 @@ ifeq ($(ARCH_X86_HAVE_SSE2), true)
     $(clcore_base_files) \
     arch/x86_generic.c \
     arch/x86_clamp.ll \
-    arch/x86_math.ll
+    arch/x86_math.ll \
+    arch/x86_pixel.ll \
+    arch/x86_matrix.ll
 
     ifeq ($(ARCH_X86_HAVE_SSE3), true)
         clcore_x86_files += arch/x86_dot_length.ll
