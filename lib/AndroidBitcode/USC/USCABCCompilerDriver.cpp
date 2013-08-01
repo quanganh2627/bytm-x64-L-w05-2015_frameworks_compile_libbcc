@@ -14,23 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef BCC_RS_COMPILER_H
-#define BCC_RS_COMPILER_H
+#include "USC/USCABCCompilerDriver.h"
 
-#include "bcc/Compiler.h"
+#include "bcc/Support/TargetCompilerConfigs.h"
+#include "bcc/Support/TargetLinkerConfigs.h"
 
 namespace bcc {
 
-class RSCompiler : public Compiler {
-private:
-  virtual bool beforeAddLTOPasses(Script &pScript,
-                                  llvm::PassManager &pPM,
-                                  const char *mTriple);
-  virtual bool beforeExecuteLTOPasses(Script &pScript,
-                                      llvm::PassManager &pPM,
-                                      const char *mTriple);
-};
+CompilerConfig *USCABCCompilerDriver::createCompilerConfig() const {
+  return new (std::nothrow) CompilerConfig("usc");
+}
+
+LinkerConfig *USCABCCompilerDriver::createLinkerConfig() const {
+  return NULL;
+}
 
 } // end namespace bcc
-
-#endif // BCC_RS_COMPILER_H

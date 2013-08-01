@@ -107,7 +107,9 @@ protected:
   // Plugin callbacks for sub-class.
   //===--------------------------------------------------------------------===//
   // Called before adding first pass to code-generation passes.
-  virtual bool beforeAddLTOPasses(Script &pScript, llvm::PassManager &pPM)
+  virtual bool beforeAddLTOPasses(Script &pScript,
+                                  llvm::PassManager &pPM,
+                                  const char *mTriple)
   { return true; }
 
   // Called after adding last pass to code-generation passes.
@@ -116,7 +118,8 @@ protected:
 
   // Called before executing code-generation passes.
   virtual bool beforeExecuteLTOPasses(Script &pScript,
-                                          llvm::PassManager &pPM)
+                                      llvm::PassManager &pPM,
+                                      const char *mTriple)
   { return true; }
 
   // Called after executing code-generation passes.

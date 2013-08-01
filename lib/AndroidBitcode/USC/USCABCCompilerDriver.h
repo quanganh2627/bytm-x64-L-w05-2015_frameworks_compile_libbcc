@@ -14,23 +14,27 @@
  * limitations under the License.
  */
 
-#ifndef BCC_RS_COMPILER_H
-#define BCC_RS_COMPILER_H
+#ifndef BCC_USC_ABC_COMPILER_DRIVER_H
+#define BCC_USC_ABC_COMPILER_DRIVER_H
 
-#include "bcc/Compiler.h"
+#include "bcc/AndroidBitcode/ABCCompilerDriver.h"
 
 namespace bcc {
 
-class RSCompiler : public Compiler {
+class USCABCCompilerDriver : public ABCCompilerDriver {
+public:
+  USCABCCompilerDriver()
+    : ABCCompilerDriver() { }
+
+  virtual ~USCABCCompilerDriver() { }
+
 private:
-  virtual bool beforeAddLTOPasses(Script &pScript,
-                                  llvm::PassManager &pPM,
-                                  const char *mTriple);
-  virtual bool beforeExecuteLTOPasses(Script &pScript,
-                                      llvm::PassManager &pPM,
-                                      const char *mTriple);
+  virtual CompilerConfig *createCompilerConfig() const;
+  virtual LinkerConfig *createLinkerConfig() const;
+
+  virtual ABCExpandVAArgPass *createExpandVAArgPass() const;
 };
 
 } // end namespace bcc
 
-#endif // BCC_RS_COMPILER_H
+#endif // BCC_USC_ABC_COMPILER_DRIVER_H

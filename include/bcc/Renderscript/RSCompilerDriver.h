@@ -34,6 +34,8 @@ class RSCompilerDriver {
 private:
   CompilerConfig *mConfig;
   RSCompiler mCompiler;
+  const char *mDefaultTriple;
+  const char *mDefaultLibrary;
 
   CompilerRTSymbolResolver *mCompilerRuntime;
   LookupFunctionSymbolResolver<void*> mRSRuntime;
@@ -65,6 +67,11 @@ public:
   { mRSRuntime.setLookupFunction(pLookupFunc); }
   inline void setRSRuntimeLookupContext(void *pContext)
   { mRSRuntime.setContext(pContext); }
+  inline void setRSDefaultCompilerTriple(const char *pTriple)
+  { mDefaultTriple = pTriple; }
+  inline void setRSDefaultCoreLibrary(const char *pLibrary)
+  { mDefaultLibrary = pLibrary; }
+  void loadPlugin(const char *pLibName);
 
   RSCompiler *getCompiler() {
     return &mCompiler;

@@ -168,7 +168,8 @@ enum Compiler::ErrorCode Compiler::runLTO(Script &pScript) {
   lto_passes.add(data_layout);
 
   // Invokde "beforeAddLTOPasses" before adding the first pass.
-  if (!beforeAddLTOPasses(pScript, lto_passes)) {
+  if (!beforeAddLTOPasses(pScript, lto_passes,
+                          mTarget->getTargetTriple().data())) {
     return kErrHookBeforeAddLTOPasses;
   }
 
@@ -262,7 +263,7 @@ enum Compiler::ErrorCode Compiler::runLTO(Script &pScript) {
   }
 
   // Invokde "beforeExecuteLTOPasses" before executing the passes.
-  if (!beforeExecuteLTOPasses(pScript, lto_passes)) {
+  if (!beforeExecuteLTOPasses(pScript, lto_passes, mTarget->getTargetTriple().data())) {
     return kErrHookBeforeExecuteLTOPasses;
   }
 

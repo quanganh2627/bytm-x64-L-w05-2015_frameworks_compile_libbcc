@@ -17,6 +17,7 @@
 #include "bcc/Renderscript/RSCompilerDriver.h"
 
 #include <llvm/Support/Path.h>
+#include <llvm/Support/PluginLoader.h>
 
 #include "bcinfo/BitcodeWrapper.h"
 
@@ -61,7 +62,7 @@ bool is_force_recompile() {
 } // end anonymous namespace
 
 RSCompilerDriver::RSCompilerDriver(bool pUseCompilerRT) :
-    mConfig(NULL), mCompiler(), mCompilerRuntime(NULL), mDebugContext(false) {
+    mConfig(NULL), mCompiler(), mDefaultTriple(NULL), mDefaultLibrary(NULL), mCompilerRuntime(NULL), mDebugContext(false) {
   init::Initialize();
   // Chain the symbol resolvers for compiler_rt and RS runtimes.
   if (pUseCompilerRT) {
@@ -163,7 +164,10 @@ bool RSCompilerDriver::setupConfig(const RSScript &pScript) {
     }
   } else {
     // Haven't run the compiler ever.
-    mConfig = new (std::nothrow) DefaultCompilerConfig();
+    if (mDefaultTriple) // Preference the default triple if set through setRSDefaultCompilerTriple
+      mConfig = new (std::nothrow) CompilerConfig(mDefaultTriple);
+    else
+      mConfig = new (std::nothrow) DefaultCompilerConfig();
     if (mConfig == NULL) {
       // Return false since mConfig remains NULL and out-of-memory.
       return false;
@@ -195,6 +199,10 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   //android::StopWatch compile_time("bcc: RSCompilerDriver::compileScript time");
   RSExecutable *result = NULL;
   RSInfo *info = NULL;
+
+  if (mDefaultLibrary) {
+	pScript.setPreferredLibrary(mDefaultLibrary);
+  }
 
   //===--------------------------------------------------------------------===//
   // Extract RS-specific information from source bitcode.
@@ -430,6 +438,11 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
   }
 
   return result;
+}
+
+void
+RSCompilerDriver::loadPlugin(const char *pLibName) {
+  llvm::PluginLoader() = pLibName;
 }
 
 
