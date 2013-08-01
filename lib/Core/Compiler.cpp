@@ -167,7 +167,8 @@ enum Compiler::ErrorCode Compiler::runLTO(Script &pScript) {
   lto_passes.add(data_layout);
 
   // Invoke "beforeAddLTOPasses" before adding the first pass.
-  if (!beforeAddLTOPasses(pScript, lto_passes)) {
+  if (!beforeAddLTOPasses(pScript, lto_passes,
+                          mTarget->getTargetTriple().data())) {
     return kErrHookBeforeAddLTOPasses;
   }
 

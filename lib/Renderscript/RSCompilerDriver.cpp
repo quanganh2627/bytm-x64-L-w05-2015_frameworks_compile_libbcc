@@ -20,6 +20,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/PluginLoader.h>
 
 #include "bcinfo/BitcodeWrapper.h"
 
@@ -49,8 +50,8 @@
 using namespace bcc;
 
 RSCompilerDriver::RSCompilerDriver(bool pUseCompilerRT) :
-    mConfig(NULL), mCompiler(), mCompilerRuntime(NULL), mDebugContext(false),
-    mEnableGlobalMerge(true) {
+    mConfig(NULL), mCompiler(), mDefaultTriple(NULL), mDefaultLibrary(NULL),
+    mCompilerRuntime(NULL), mDebugContext(false), mEnableGlobalMerge(true) {
   init::Initialize();
   // Chain the symbol resolvers for compiler_rt and RS runtimes.
   if (pUseCompilerRT) {
@@ -173,7 +174,10 @@ bool RSCompilerDriver::setupConfig(const RSScript &pScript) {
     }
   } else {
     // Haven't run the compiler ever.
-    mConfig = new (std::nothrow) DefaultCompilerConfig();
+    if (mDefaultTriple) // Preference the default triple if set through setRSDefaultCompilerTriple
+      mConfig = new (std::nothrow) CompilerConfig(mDefaultTriple);
+    else
+      mConfig = new (std::nothrow) DefaultCompilerConfig();
     if (mConfig == NULL) {
       // Return false since mConfig remains NULL and out-of-memory.
       return false;
@@ -207,6 +211,10 @@ RSCompilerDriver::compileScript(RSScript &pScript,
                                 bool pSkipLoad, bool pDumpIR) {
   //android::StopWatch compile_time("bcc: RSCompilerDriver::compileScript time");
   RSInfo *info = NULL;
+
+  if (mDefaultLibrary) {
+	pScript.setPreferredLibrary(mDefaultLibrary);
+  }
 
   //===--------------------------------------------------------------------===//
   // Extract RS-specific information from source bitcode.
@@ -407,8 +415,9 @@ bool RSCompilerDriver::build(BCCContext &pContext,
   //===--------------------------------------------------------------------===//
   llvm::SmallString<80> output_path(pCacheDir);
   llvm::sys::path::append(output_path, pResName);
+#ifdef TARGET_BUILD
   llvm::sys::path::replace_extension(output_path, ".o");
-
+#endif
   dep_info.push(std::make_pair(output_path.c_str(), bitcode_sha1));
 
   //===--------------------------------------------------------------------===//
@@ -454,6 +463,10 @@ bool RSCompilerDriver::build(BCCContext &pContext,
   return true;
 }
 
+void
+RSCompilerDriver::loadPlugin(const char *pLibName) {
+  llvm::PluginLoader() = pLibName;
+}
 
 bool RSCompilerDriver::build(RSScript &pScript, const char *pOut,
                              const char *pRuntimePath) {
