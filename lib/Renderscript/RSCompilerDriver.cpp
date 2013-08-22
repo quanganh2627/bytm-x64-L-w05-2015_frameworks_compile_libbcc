@@ -42,6 +42,10 @@
 #include <utils/String8.h>
 #include <utils/StopWatch.h>
 
+#ifdef ARCH_X86_RS_VECTORIZER
+#include "bcc/Renderscript/RSVectorizationSupport.h"
+#endif
+
 using namespace bcc;
 
 RSCompilerDriver::RSCompilerDriver(bool pUseCompilerRT) :
@@ -221,6 +225,38 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   // to do some transformation (e.g., expand foreach-able function.)
   pScript.setInfo(info);
 
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+  //===--------------------------------------------------------------------===//
+  // Setup the config to the compiler.
+  //===--------------------------------------------------------------------===//
+  bool compiler_need_reconfigure = setupConfig(pScript);
+
+  if (mConfig == NULL) {
+    ALOGE("Failed to setup config for RS compiler to compile %s!", pOutputPath);
+    delete info;
+    return Compiler::kErrInvalidSource;
+  }
+
+  // Compiler need to re-config if it's haven't run the config() yet or the
+  // configuration it referenced is changed.
+  if (compiler_need_reconfigure) {
+    Compiler::ErrorCode err = mCompiler.config(*mConfig);
+    if (err != Compiler::kSuccess) {
+      ALOGE("Failed to config the RS compiler for %s! (%s)",pOutputPath,
+            Compiler::GetErrorString(err));
+      delete info;
+      return Compiler::kErrInvalidSource;
+    }
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Perform pre-compilation transformation on the input script bitcode
+  //===--------------------------------------------------------------------===//
+  // This is required in order to make the code suitable for vectorization and
+  // before linking the builtin's implementation to the script bitcode
+  mCompiler.performCodeTransformations(pScript);
+#endif
+
   //===--------------------------------------------------------------------===//
   // Link RS script with Renderscript runtime.
   //===--------------------------------------------------------------------===//
@@ -255,6 +291,7 @@ RSCompilerDriver::compileScript(RSScript &pScript,
       return Compiler::kErrInvalidSource;
     }
 
+#ifndef ENABLE_VECTORIZATION_SUPPORT
     // Setup the config to the compiler.
     bool compiler_need_reconfigure = setupConfig(pScript);
 
@@ -272,6 +309,7 @@ RSCompilerDriver::compileScript(RSScript &pScript,
         return Compiler::kErrInvalidSource;
       }
     }
+#endif
 
     OutputFile *ir_file = NULL;
     llvm::raw_fd_ostream *IRStream = NULL;

@@ -27,7 +27,42 @@
 #include "bcc/Source.h"
 #include "bcc/Support/Log.h"
 
+#ifdef ARCH_X86_RS_VECTORIZER
+#include "bcc/Renderscript/RSVectorizationSupport.h"
+#endif
+
 using namespace bcc;
+
+bool RSCompiler::performCodeTransformations(Script &pScript) {
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+  if(RSVectorizationSupport::isVectorizerEnabled()) {
+    RSScript &script = static_cast<RSScript &>(pScript);
+    const RSInfo *info = script.getInfo();
+    llvm::Module &module = script.getSource().getModule();
+
+    // Materialize the bitcode module.
+    if (module.getMaterializer() != NULL) {
+      std::string error;
+      // A module with non-null materializer means that it is a lazy-load module.
+      // Materialize it now via invoking MaterializeAllPermanently(). This
+      // function returns false when the materialization is successful.
+      if (module.MaterializeAllPermanently(&error)) {
+        // If we reach this it means something happened with our script or it can't
+        // materialized, so roll-back to the scalar version without any vectorization
+        // changes on the module
+
+        ALOGW("Failed to materialize the module `%s'! (%s)",
+              module.getModuleIdentifier().c_str(), error.c_str());
+        return false;
+      }
+      return RSVectorizationSupport::prepareModuleForVectorization(info, &module);
+    }
+  }
+  return false;
+#else
+  return false;
+#endif
+}
 
 bool RSCompiler::addInternalizeSymbolsPass(Script &pScript, llvm::PassManager &pPM) {
   // Add a pass to internalize the symbols that don't need to have global
