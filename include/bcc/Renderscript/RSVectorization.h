@@ -14,27 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef BCC_RS_COMPILER_H
-#define BCC_RS_COMPILER_H
+#ifndef BCC_RS_VECTORIZATION_H
+#define BCC_RS_VECTORIZATION_H
 
-#include "bcc/Compiler.h"
+#define ENABLE_VECTORIZATION_SUPPORT
 
-namespace llvm {
-  class Module;
-  class Function;
-};
+// turn on the hueristic
+#define __VECTORIZER_HUERISTIC
 
-namespace bcc {
-
-class RSCompiler : public Compiler {
-public:
-  virtual bool performCodeTransformations(Script &pScript);
-private:
-  virtual bool beforeAddLTOPasses(Script &pScript, llvm::PassManager &pPM);
-  bool addInternalizeSymbolsPass(Script &pScript, llvm::PassManager &pPM);
-  bool addExpandForEachPass(Script &pScript, llvm::PassManager &pPM);
-};
-
-} // end namespace bcc
-
-#endif // BCC_RS_COMPILER_H
+#endif // BCC_RS_VECTORIZATION_H
