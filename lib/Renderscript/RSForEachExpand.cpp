@@ -29,9 +29,24 @@
 #include <llvm/IR/DataLayout.h>
 #include <llvm/IR/Type.h>
 
+#include <llvm/PassManager.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Analysis/Passes.h>
+
 #include "bcc/Config/Config.h"
 #include "bcc/Renderscript/RSInfo.h"
 #include "bcc/Support/Log.h"
+
+#include <unistd.h>
+#include <sys/types.h>
+
+#include "bcc/Renderscript/RSVectorizationSupport.h"
+
+// TODO[MA]: remove me
+#include <string>
+#include <fstream>
+#include <iostream>
+#include <sstream>
 
 using namespace bcc;
 
@@ -147,7 +162,6 @@ private:
     return Signature & 0x20;
   }
 
-
 public:
   RSForEachExpandPass(const RSInfo::ExportForeachFuncListTy &pForeachFuncs,
                       bool pEnableStepOpt)
@@ -159,7 +173,8 @@ public:
    * Module will contain a new function of the name "<NAME>.expand" that
    * invokes <NAME>() in a loop with the appropriate parameters.
    */
-  bool ExpandFunction(llvm::Function *F, uint32_t Signature) {
+  bool ExpandFunction(llvm::Function* Fname, llvm::Function *F, uint32_t Signature,
+    bool useNewExpand, llvm::Function* vecKernel) {
     ALOGV("Expanding ForEach-able Function %s", F->getName().str().c_str());
 
     if (!Signature) {
@@ -220,10 +235,11 @@ public:
 
     llvm::FunctionType *FT =
         llvm::FunctionType::get(llvm::Type::getVoidTy(*C), ParamTys, false);
+
     llvm::Function *ExpandedFunc =
         llvm::Function::Create(FT,
                                llvm::GlobalValue::ExternalLinkage,
-                               F->getName() + ".expand", M);
+                               Fname->getName() + ".expand", M);
 
     // Create and name the actual arguments to this expanded function.
     llvm::SmallVector<llvm::Argument*, 8> ArgVec;
@@ -312,11 +328,121 @@ public:
 
     bccAssert(Args == F->arg_end());
 
+    llvm::Value *InPtr = NULL;
+    llvm::Value *OutPtr = NULL;
+
+    llvm::BasicBlock *V_Loop = NULL;
+    llvm::BasicBlock *S_Loop = NULL;
+
+    if(useNewExpand) {
+      // vector steps
+      llvm::Value *V_InStep =
+          Builder.CreateMul(Arg_instep, llvm::ConstantInt::get(Int32Ty, 4));
+      llvm::Value *V_OutStep =
+          Builder.CreateMul(Arg_outstep, llvm::ConstantInt::get(Int32Ty, 4));
+
+      // These are the changes for the new expand need to be enabled when the
+      // vectorizer is ON
+      V_Loop = llvm::BasicBlock::Create(*C, "V_Loop", ExpandedFunc);
+      S_Loop = llvm::BasicBlock::Create(*C, "S_Loop", ExpandedFunc);
+
+      // prepare the VCond
+      llvm::Value *range  = Builder.CreateSub(Arg_x2, Arg_x1);
+      llvm::Value *Arg_x3 =
+          Builder.CreateSDiv(range, llvm::ConstantInt::get(Int32Ty, 4));
+      llvm::Value *v_range=
+          Builder.CreateMul(Arg_x3, llvm::ConstantInt::get(Int32Ty, 4));
+      llvm::Value *Arg_x4 =
+          Builder.CreateAdd(v_range, Arg_x1);
+      llvm::Value *VCond = Builder.CreateICmpSLT(Arg_x1, Arg_x4);
+      Builder.CreateCondBr(VCond, V_Loop, S_Loop);
+
+      // V_Loop:
+      Builder.SetInsertPoint(V_Loop);
+
+      // Populate the actual call to kernel().
+      llvm::SmallVector<llvm::Value*, 8> V_RootArgs;
+
+      if (AIn) {
+        InPtr = Builder.CreateLoad(AIn, "InPtr");
+        V_RootArgs.push_back(InPtr);
+      }
+
+      if (AOut) {
+        OutPtr = Builder.CreateLoad(AOut, "OutPtr");
+        V_RootArgs.push_back(OutPtr);
+      }
+
+      if (UsrData) {
+        V_RootArgs.push_back(UsrData);
+      }
+
+      // We always have to load X, since it is used to iterate through the loop.
+      llvm::Value *V_X = Builder.CreateLoad(AX, "X");
+      if (hasX(Signature)) {
+        V_RootArgs.push_back(V_X);
+      }
+
+      if (Y) {
+        V_RootArgs.push_back(Y);
+      }
+
+      // Call the vectorized Function
+      if(NULL != vecKernel){
+        Builder.CreateCall(vecKernel, V_RootArgs);
+      }
+      else {
+        Builder.CreateCall(F, V_RootArgs);
+      }
+
+
+      if (InPtr) {
+        // InPtr += instep X 4
+        // TODO[MA]: need to move 4 elements ; there is a bug in the org code
+        //           currently it moves by 4 bytes without checking the outstep
+        //           value, the vectorized code move by 4 X outstep this may
+        //           raise mismatch bug
+        llvm::Value *NewIn = Builder.CreateIntToPtr(Builder.CreateNUWAdd(
+            Builder.CreatePtrToInt(InPtr, Int32Ty), V_InStep), InTy);
+        Builder.CreateStore(NewIn, AIn);
+      }
+
+      if (OutPtr) {
+        // OutPtr += outstep X 4
+        // TODO[MA]: need to move 4 elements ; there is a bug in the org code
+        //           currently it moves by 4 bytes without checking the outstep
+        //           value, the vectorized code move by 4 X outstep this may
+        //           raise mismatch bug
+        llvm::Value *NewOut = Builder.CreateIntToPtr(Builder.CreateNUWAdd(
+            Builder.CreatePtrToInt(OutPtr, Int32Ty), V_OutStep), OutTy);
+        Builder.CreateStore(NewOut, AOut);
+      }
+
+      // X+=4;
+      llvm::Value *XPlusFour =
+          Builder.CreateNUWAdd(V_X, llvm::ConstantInt::get(Int32Ty, 4));
+      Builder.CreateStore(XPlusFour, AX);
+
+      // If (X < x4) goto V_Loop; else goto S_Loop; (for the reminder)
+      VCond = Builder.CreateICmpSLT(XPlusFour, Arg_x4);
+      Builder.CreateCondBr(VCond, V_Loop, S_Loop);
+    }
+
     llvm::BasicBlock *Loop = llvm::BasicBlock::Create(*C, "Loop", ExpandedFunc);
     llvm::BasicBlock *Exit = llvm::BasicBlock::Create(*C, "Exit", ExpandedFunc);
 
+    llvm::Value *Cond = NULL;
+    if(useNewExpand) {
+       Builder.SetInsertPoint(S_Loop);
+       llvm::Value *X_scalar = Builder.CreateLoad(AX, "X");
     // if (x1 < x2) goto Loop; else goto Exit;
-    llvm::Value *Cond = Builder.CreateICmpSLT(Arg_x1, Arg_x2);
+       Cond = Builder.CreateICmpSLT(X_scalar, Arg_x2);
+    }
+    else {
+       // if (x1 < x2) goto Loop; else goto Exit;
+       Cond = Builder.CreateICmpSLT(Arg_x1, Arg_x2);
+    }
+
     Builder.CreateCondBr(Cond, Loop, Exit);
 
     // Loop:
@@ -324,9 +450,6 @@ public:
 
     // Populate the actual call to kernel().
     llvm::SmallVector<llvm::Value*, 8> RootArgs;
-
-    llvm::Value *InPtr = NULL;
-    llvm::Value *OutPtr = NULL;
 
     if (AIn) {
       InPtr = Builder.CreateLoad(AIn, "InPtr");
@@ -522,6 +645,7 @@ public:
     }
 
     // No usrData parameter on kernels.
+    // TODO[MA]: need to check this in some earlier passes
     bccAssert(!hasUsrData(Signature));
 
     if (hasX(Signature)) {
@@ -616,6 +740,15 @@ public:
     this->M = &M;
     C = &M.getContext();
 
+    // call the vectorizer pass
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+    llvm::SmallVector<llvm::Function*, 4> vectorizedFunctions;
+    llvm::SmallVector<int, 4> vectorizedWidths;
+    if(RSVectorizationSupport::isVectorizerEnabled()) {
+      RSVectorizationSupport::vectorizeModule(M, vectorizedFunctions, vectorizedWidths);
+    }
+#endif
+
     for (RSInfo::ExportForeachFuncListTy::const_iterator
              func_iter = mFuncs.begin(), func_end = mFuncs.end();
          func_iter != func_end; func_iter++) {
@@ -623,10 +756,68 @@ public:
       uint32_t signature = func_iter->second;
       llvm::Function *kernel = M.getFunction(name);
       if (kernel && isKernel(signature)) {
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+        bool useScalarVersion = false;
+        if(RSVectorizationSupport::isVectorizerEnabled()) {
+          // for each kernel foo we generate a wrapper that works by ptrs and return void
+          llvm::Function* wrapperFunction = RSVectorizationSupport::SearchForWrapperFunction
+                                            (M, kernel);
+          llvm::Function* vecWrapper = NULL;
+
+          if (NULL == wrapperFunction) {
+            //ALOGW("Failed to find wrapper version for '%s'",
+            //      kernel->getName().str().c_str());
+            // cannot use the vectorized version
+            useScalarVersion = true;
+          }
+          else {
+            // now search for the vectorized function of the wrapper
+            vecWrapper = RSVectorizationSupport::SearchForVectorizedKernel
+                           (M, wrapperFunction);
+            if (NULL == vecWrapper) {
+              //ALOGW("Failed to find x86-vectorized version for '%s'",
+              //      kernel->getName().str().c_str());
+              // cannot use the vectorized version
+              useScalarVersion = true;
+            }
+          }
+
+          if(useScalarVersion) {
+            // roll-back to the normal scalar version
         Changed |= ExpandKernel(kernel, signature);
       }
+          else {
+            Changed |= ExpandFunction(kernel, wrapperFunction, signature, true, vecWrapper);
+          }
+        }
+        else {
+          Changed |= ExpandKernel(kernel, signature);
+        }
+#else
+        Changed |= ExpandKernel(kernel, signature);
+#endif
+      }
       else if (kernel && kernel->getReturnType()->isVoidTy()) {
-        Changed |= ExpandFunction(kernel, signature);
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+        if(RSVectorizationSupport::isVectorizerEnabled()) {
+          // get the vectorized function and build the new expand using it
+          llvm::Function* vecKernel = RSVectorizationSupport::SearchForVectorizedKernel
+                                        (M, kernel);
+
+          bool useNewExpand = (NULL != vecKernel) ? true : false;
+          //if(!useNewExpand) {
+          //  ALOGW("Failed to find x86-vectorized version for '%s'",
+          //        kernel->getName().str().c_str());
+          //}
+
+          Changed |= ExpandFunction(kernel, kernel, signature, useNewExpand, vecKernel);
+        }
+        else {
+          Changed |= ExpandFunction(kernel, kernel, signature, false, NULL);
+        }
+#else
+        Changed |= ExpandFunction(kernel, kernel, signature, false, NULL);
+#endif
       }
     }
 

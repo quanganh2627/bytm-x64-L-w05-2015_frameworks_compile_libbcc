@@ -19,9 +19,16 @@
 
 #include "bcc/Compiler.h"
 
+namespace llvm {
+  class Module;
+  class Function;
+};
+
 namespace bcc {
 
 class RSCompiler : public Compiler {
+public:
+  virtual bool performCodeTransformations(Script &pScript);
 private:
   virtual bool beforeAddLTOPasses(Script &pScript,
                                   llvm::PassManager &pPM,

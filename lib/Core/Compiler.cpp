@@ -33,6 +33,8 @@
 #include "bcc/Support/Log.h"
 #include "bcc/Support/OutputFile.h"
 
+#include "bcc/Renderscript/RSVectorizationSupport.h"
+
 using namespace bcc;
 
 const char *Compiler::GetErrorString(enum ErrorCode pErrCode) {
@@ -326,6 +328,17 @@ enum Compiler::ErrorCode Compiler::runCodeGen(Script &pScript,
 
   return kSuccess;
 }
+
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+void Compiler::dbgPoint(const char* tag, const char* title) {
+  RSVectorizationSupport::dumpDebugPoint(tag, title);
+}
+
+void Compiler::dumpScript(const char* tag, const char* title, Script &pScript) {
+  llvm::Module& module = pScript.getSource().getModule();
+  RSVectorizationSupport::dumpModule(tag, title, module);
+}
+#endif
 
 enum Compiler::ErrorCode Compiler::compile(Script &pScript,
                                            llvm::raw_ostream &pResult) {

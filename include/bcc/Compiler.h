@@ -17,6 +17,8 @@
 #ifndef BCC_COMPILER_H
 #define BCC_COMPILER_H
 
+#include "bcc/Renderscript/RSVectorization.h"
+
 namespace llvm {
 
 class raw_ostream;
@@ -85,6 +87,12 @@ private:
 public:
   Compiler();
   Compiler(const CompilerConfig &pConfig);
+
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+  /// used for debug purpose for RS\Vectorizer extention
+  void dbgPoint(const char* tag, const char* title);
+  void dumpScript(const char* tag, const char* title, Script &pScript);
+#endif
 
   enum ErrorCode config(const CompilerConfig &pConfig);
 
