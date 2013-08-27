@@ -17,7 +17,6 @@
 #include "bcc/Renderscript/RSCompilerDriver.h"
 
 #include <llvm/Support/Path.h>
-#include <llvm/Support/PluginLoader.h>
 
 #include "bcinfo/BitcodeWrapper.h"
 
@@ -61,7 +60,7 @@ bool is_force_recompile() {
 
 } // end anonymous namespace
 
-RSCompilerDriver::RSCompilerDriver() : mConfig(NULL), mCompiler(), mDefaultTriple(NULL), mDefaultLibrary(NULL) {
+RSCompilerDriver::RSCompilerDriver() : mConfig(NULL), mCompiler() {
   init::Initialize();
   // Chain the symbol resolvers for BCC runtimes and RS runtimes.
   mResolver.chainResolver(mBCCRuntime);
@@ -159,10 +158,7 @@ bool RSCompilerDriver::setupConfig(const RSScript &pScript) {
     }
   } else {
     // Haven't run the compiler ever.
-    if (mDefaultTriple) // Preference the default triple if set through setRSDefaultCompilerTriple
-      mConfig = new (std::nothrow) CompilerConfig(mDefaultTriple);
-    else
-      mConfig = new (std::nothrow) DefaultCompilerConfig();
+    mConfig = new (std::nothrow) DefaultCompilerConfig();
     if (mConfig == NULL) {
       // Return false since mConfig remains NULL and out-of-memory.
       return false;
@@ -193,10 +189,6 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   RSExecutable *result = NULL;
   RSInfo *info = NULL;
 
-  if (mDefaultLibrary) {
-	pScript.setPreferredLibrary(mDefaultLibrary);
-  }
-  
   //===--------------------------------------------------------------------===//
   // Extract RS-specific information from source bitcode.
   //===--------------------------------------------------------------------===//
@@ -411,9 +403,4 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
   }
 
   return result;
-}
-
-void
-RSCompilerDriver::loadPlugin(const char *pLibName) {
-  llvm::PluginLoader() = pLibName;
 }

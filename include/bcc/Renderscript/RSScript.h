@@ -44,8 +44,6 @@ private:
 
   OptimizationLevel mOptimizationLevel;
 
-  const char *mPreferredLibrary;
-
 private:
   // This will be invoked when the containing source has been reset.
   virtual bool doReset();
@@ -73,12 +71,6 @@ public:
 
   OptimizationLevel getOptimizationLevel() const
   {  return mOptimizationLevel; }
-
-  void setPreferredLibrary(const char *pPreferredLibrary)
-  { mPreferredLibrary = pPreferredLibrary; }
-
-  const char *getPreferredLibrary() const
-  { return mPreferredLibrary; }
 };
 
 } // end namespace bcc

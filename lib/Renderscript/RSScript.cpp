@@ -27,11 +27,6 @@ bool RSScript::LinkRuntime(RSScript &pScript) {
   BCCContext &context = pScript.getSource().getContext();
   const char* core_lib = RSInfo::LibCLCorePath;
 
-  // SSE2- or above capable devices will use an optimized library.
-#if defined(ARCH_X86_HAVE_SSE2)
-  core_lib = RSInfo::LibCLCoreX86Path;
-#endif
-
   // NEON-capable devices can use an accelerated math library for all
   // reduced precision scripts.
 #if defined(ARCH_ARM_HAVE_NEON)
@@ -41,10 +36,6 @@ bool RSScript::LinkRuntime(RSScript &pScript) {
     core_lib = RSInfo::LibCLCoreNEONPath;
   }
 #endif
-
-  if (pScript.getPreferredLibrary()) {
-    core_lib = pScript.getPreferredLibrary();
-  }
 
   Source *libclcore_source = Source::CreateFromFile(context, core_lib);
   if (libclcore_source == NULL) {
@@ -64,12 +55,11 @@ bool RSScript::LinkRuntime(RSScript &pScript) {
 
 RSScript::RSScript(Source &pSource)
   : Script(pSource), mInfo(NULL), mCompilerVersion(0),
-    mOptimizationLevel(kOptLvl3), mPreferredLibrary(NULL) { }
+    mOptimizationLevel(kOptLvl3) { }
 
 bool RSScript::doReset() {
   mInfo = NULL;
   mCompilerVersion = 0;
   mOptimizationLevel = kOptLvl3;
-  mPreferredLibrary = NULL;
   return true;
 }
