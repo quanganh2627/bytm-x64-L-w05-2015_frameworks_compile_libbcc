@@ -16,9 +16,10 @@
 
 #include "bcc/AndroidBitcode/ABCCompilerDriver.h"
 
-#include <llvm/Module.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Support/PluginLoader.h>
 #include <llvm/Support/raw_ostream.h>
 #include <mcld/Config/Config.h>
 
@@ -41,13 +42,13 @@
 #if defined(PROVIDE_X86_CODEGEN)
 # include "X86/X86ABCCompilerDriver.h"
 #endif
+# include "USC/USCABCCompilerDriver.h"
 
 namespace bcc {
 
-ABCCompilerDriver::ABCCompilerDriver(const std::string &pTriple)
+ABCCompilerDriver::ABCCompilerDriver()
   : mContext(), mCompiler(*this), mLinker(),
-    mCompilerConfig(NULL), mLinkerConfig(NULL),
-    mTriple(pTriple), mAndroidSysroot("/") {
+    mCompilerConfig(NULL), mLinkerConfig(NULL), mAndroidSysroot("/") {
 }
 
 ABCCompilerDriver::~ABCCompilerDriver() {
@@ -60,7 +61,7 @@ bool ABCCompilerDriver::configCompiler() {
     return true;
   }
 
-  mCompilerConfig = new (std::nothrow) CompilerConfig(mTriple);
+  mCompilerConfig = createCompilerConfig();
   if (mCompilerConfig == NULL) {
     ALOGE("Out of memory when create the compiler configuration!");
     return false;
@@ -88,7 +89,7 @@ bool ABCCompilerDriver::configLinker() {
     return true;
   }
 
-  mLinkerConfig = new (std::nothrow) LinkerConfig(mTriple);
+  mLinkerConfig = createLinkerConfig();
   if (mLinkerConfig == NULL) {
     ALOGE("Out of memory when create the linker configuration!");
     return false;
@@ -117,6 +118,11 @@ bool ABCCompilerDriver::configLinker() {
 
   // -Bsymbolic.
   mLinkerConfig->setBsymbolic(true);
+
+  // Set kRelro for -z relro
+  // Not set kExecStack for -z noexecstack
+  // Not set kLazy for -z now
+  mLinkerConfig->setZOption(LinkerConfig::kRelro);
 
   // Config the linker.
   Linker::ErrorCode result = mLinker.config(*mLinkerConfig);
@@ -155,6 +161,10 @@ bool ABCCompilerDriver::compile(Script &pScript, llvm::raw_ostream &pOutput) {
     return false;
   }
 
+  /* If compiling for USC, enable LTO */
+  if (!mCompilerConfig->getTriple().compare("usc"))
+	  mCompiler.enableLTO(true);
+
   // Run the compiler.
   Compiler::ErrorCode result = mCompiler.compile(pScript, pOutput);
   if (result != Compiler::kSuccess) {
@@ -191,14 +201,6 @@ bool ABCCompilerDriver::link(const Script &pScript,
   mLinker.addObject(const_cast<char *>(input_relocatable.data()),
                     input_relocatable.size());
 
-  // Read dependent library list.
-  const Source &source = pScript.getSource();
-  for (llvm::Module::lib_iterator lib_iter = source.getModule().lib_begin(),
-          lib_end = source.getModule().lib_end(); lib_iter != lib_end;
-       ++lib_iter) {
-    mLinker.addNameSpec(*lib_iter);
-  }
-
   // TODO: Refactor libbcc/runtime/ to libcompilerRT.so and use it.
   mLinker.addNameSpec("bcc");
 
@@ -219,6 +221,13 @@ bool ABCCompilerDriver::link(const Script &pScript,
 
 ABCCompilerDriver *ABCCompilerDriver::Create(const std::string &pTriple) {
   std::string error;
+
+  /* If the triple is 'usc', begin by loading our plugin so it can be handled */
+  if (!pTriple.compare("usc"))
+  {
+	  llvm::PluginLoader() = "librsccompiler.so";
+  }
+
   const llvm::Target *target =
       llvm::TargetRegistry::lookupTarget(pTriple, error);
 
@@ -230,21 +239,26 @@ ABCCompilerDriver *ABCCompilerDriver::Create(const std::string &pTriple) {
 
   switch (llvm::Triple::getArchTypeForLLVMName(target->getName())) {
 #if defined(PROVIDE_ARM_CODEGEN)
-    case llvm::Triple::arm:
+    case llvm::Triple::arm: {
+      return new ARMABCCompilerDriver(/* pInThumbMode */false);
+    }
     case llvm::Triple::thumb: {
-      return new ARMABCCompilerDriver(pTriple);
+      return new ARMABCCompilerDriver(/* pInThumbMode */true);
     }
 #endif
 #if defined(PROVIDE_MIPS_CODEGEN)
     case llvm::Triple::mipsel: {
-      return new MipsABCCompilerDriver(pTriple);
+      return new MipsABCCompilerDriver();
     }
 #endif
 #if defined(PROVIDE_X86_CODEGEN)
     case llvm::Triple::x86: {
-      return new X86ABCCompilerDriver(pTriple);
+      return new X86ABCCompilerDriver();
     }
 #endif
+    case llvm::Triple::usc: {
+      return new USCABCCompilerDriver();
+    }
     default: {
       ALOGE("Unknown architecture '%s' supplied in %s!", target->getName(),
             pTriple.c_str());
@@ -292,11 +306,19 @@ bool ABCCompilerDriver::build(int pInputFd, int pOutputFd) {
   delete output;
 
   //===--------------------------------------------------------------------===//
-  // Link.
+  // Link or directly copy bitcode into abcc's output in the case of USC.
   //===--------------------------------------------------------------------===//
-  if (!link(*script, output_relocatable, pOutputFd)) {
-    delete script;
-    return false;
+  if (mCompilerConfig->getTriple().compare("usc")) {
+    if (!link(*script, output_relocatable, pOutputFd)) {
+      delete script;
+      return false;
+    }
+  } else {
+	// Open abcc's output in a raw_ostream and copy bitcode into it.
+    llvm::raw_ostream *abcc_output =
+        new (std::nothrow) llvm::raw_fd_ostream(pOutputFd, false);
+    (*abcc_output) << output_relocatable;
+    delete abcc_output;
   }
 
   //===--------------------------------------------------------------------===//

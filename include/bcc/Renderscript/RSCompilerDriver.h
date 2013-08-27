@@ -17,7 +17,7 @@
 #ifndef BCC_RS_COMPILER_DRIVER_H
 #define BCC_RS_COMPILER_DRIVER_H
 
-#include "bcc/ExecutionEngine/BCCRuntimeSymbolResolver.h"
+#include "bcc/ExecutionEngine/CompilerRTSymbolResolver.h"
 #include "bcc/ExecutionEngine/SymbolResolvers.h"
 #include "bcc/ExecutionEngine/SymbolResolverProxy.h"
 #include "bcc/Renderscript/RSInfo.h"
@@ -34,10 +34,15 @@ class RSCompilerDriver {
 private:
   CompilerConfig *mConfig;
   RSCompiler mCompiler;
+  const char *mDefaultTriple;
+  const char *mDefaultLibrary;
 
-  BCCRuntimeSymbolResolver mBCCRuntime;
+  CompilerRTSymbolResolver *mCompilerRuntime;
   LookupFunctionSymbolResolver<void*> mRSRuntime;
   SymbolResolverProxy mResolver;
+
+  // Are we compiling under an RS debug context with additional checks?
+  bool mDebugContext;
 
   RSExecutable *loadScriptCache(const char *pOutputPath,
                                 const RSInfo::DependencyTableTy &pDeps);
@@ -49,10 +54,12 @@ private:
   RSExecutable *compileScript(RSScript &pScript,
                               const char* pScriptName,
                               const char *pOutputPath,
-                              const RSInfo::DependencyTableTy &pDeps);
+                              const char *pRuntimePath,
+                              const RSInfo::DependencyTableTy &pDeps,
+                              bool pSkipLoad);
 
 public:
-  RSCompilerDriver();
+  RSCompilerDriver(bool pUseCompilerRT = true);
   ~RSCompilerDriver();
 
   inline void setRSRuntimeLookupFunction(
@@ -60,13 +67,34 @@ public:
   { mRSRuntime.setLookupFunction(pLookupFunc); }
   inline void setRSRuntimeLookupContext(void *pContext)
   { mRSRuntime.setContext(pContext); }
+  inline void setRSDefaultCompilerTriple(const char *pTriple)
+  { mDefaultTriple = pTriple; }
+  inline void setRSDefaultCoreLibrary(const char *pLibrary)
+  { mDefaultLibrary = pLibrary; }
+  void loadPlugin(const char *pLibName);
+
+  RSCompiler *getCompiler() {
+    return &mCompiler;
+  }
+
+  void setConfig(CompilerConfig *config) {
+    mConfig = config;
+  }
+
+  void setDebugContext(bool v) {
+    mDebugContext = v;
+  }
 
   // FIXME: This method accompany with loadScriptCache and compileScript should
   //        all be const-methods. They're not now because the getAddress() in
   //        SymbolResolverInterface is not a const-method.
   RSExecutable *build(BCCContext &pContext,
                       const char *pCacheDir, const char *pResName,
-                      const char *pBitcode, size_t pBitcodeSize);
+                      const char *pBitcode, size_t pBitcodeSize,
+                      const char *pRuntimePath,
+                      RSLinkRuntimeCallback pLinkRuntimeCallback = NULL);
+  RSExecutable *build(RSScript &pScript, const char *pOut,
+                      const char *pRuntimePath);
 };
 
 } // end namespace bcc

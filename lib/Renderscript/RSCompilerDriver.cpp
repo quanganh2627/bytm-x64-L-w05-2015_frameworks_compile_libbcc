@@ -17,6 +17,7 @@
 #include "bcc/Renderscript/RSCompilerDriver.h"
 
 #include <llvm/Support/Path.h>
+#include <llvm/Support/PluginLoader.h>
 
 #include "bcinfo/BitcodeWrapper.h"
 
@@ -60,21 +61,26 @@ bool is_force_recompile() {
 
 } // end anonymous namespace
 
-RSCompilerDriver::RSCompilerDriver() : mConfig(NULL), mCompiler() {
+RSCompilerDriver::RSCompilerDriver(bool pUseCompilerRT) :
+    mConfig(NULL), mCompiler(), mDefaultTriple(NULL), mDefaultLibrary(NULL), mCompilerRuntime(NULL), mDebugContext(false) {
   init::Initialize();
-  // Chain the symbol resolvers for BCC runtimes and RS runtimes.
-  mResolver.chainResolver(mBCCRuntime);
+  // Chain the symbol resolvers for compiler_rt and RS runtimes.
+  if (pUseCompilerRT) {
+    mCompilerRuntime = new CompilerRTSymbolResolver();
+    mResolver.chainResolver(*mCompilerRuntime);
+  }
   mResolver.chainResolver(mRSRuntime);
 }
 
 RSCompilerDriver::~RSCompilerDriver() {
+  delete mCompilerRuntime;
   delete mConfig;
 }
 
 RSExecutable *
 RSCompilerDriver::loadScriptCache(const char *pOutputPath,
                                   const RSInfo::DependencyTableTy &pDeps) {
-  android::StopWatch load_time("bcc: RSCompilerDriver::loadScriptCache time");
+  //android::StopWatch load_time("bcc: RSCompilerDriver::loadScriptCache time");
   RSExecutable *result = NULL;
 
   if (is_force_recompile())
@@ -97,8 +103,8 @@ RSCompilerDriver::loadScriptCache(const char *pOutputPath,
   InputFile *output_file = new (std::nothrow) InputFile(pOutputPath);
 
   if ((output_file == NULL) || output_file->hasError()) {
-    ALOGE("Unable to open the %s for read! (%s)", pOutputPath,
-          output_file->getErrorMessage().c_str());
+      //      ALOGE("Unable to open the %s for read! (%s)", pOutputPath,
+      //            output_file->getErrorMessage().c_str());
     delete output_file;
     return NULL;
   }
@@ -158,7 +164,10 @@ bool RSCompilerDriver::setupConfig(const RSScript &pScript) {
     }
   } else {
     // Haven't run the compiler ever.
-    mConfig = new (std::nothrow) DefaultCompilerConfig();
+    if (mDefaultTriple) // Preference the default triple if set through setRSDefaultCompilerTriple
+      mConfig = new (std::nothrow) CompilerConfig(mDefaultTriple);
+    else
+      mConfig = new (std::nothrow) DefaultCompilerConfig();
     if (mConfig == NULL) {
       // Return false since mConfig remains NULL and out-of-memory.
       return false;
@@ -184,10 +193,16 @@ RSExecutable *
 RSCompilerDriver::compileScript(RSScript &pScript,
                                 const char* pScriptName,
                                 const char *pOutputPath,
-                                const RSInfo::DependencyTableTy &pDeps) {
-  android::StopWatch compile_time("bcc: RSCompilerDriver::compileScript time");
+                                const char *pRuntimePath,
+                                const RSInfo::DependencyTableTy &pDeps,
+                                bool pSkipLoad) {
+  //android::StopWatch compile_time("bcc: RSCompilerDriver::compileScript time");
   RSExecutable *result = NULL;
   RSInfo *info = NULL;
+
+  if (mDefaultLibrary) {
+	pScript.setPreferredLibrary(mDefaultLibrary);
+  }
 
   //===--------------------------------------------------------------------===//
   // Extract RS-specific information from source bitcode.
@@ -209,7 +224,7 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   //===--------------------------------------------------------------------===//
   // Link RS script with Renderscript runtime.
   //===--------------------------------------------------------------------===//
-  if (!RSScript::LinkRuntime(pScript)) {
+  if (!RSScript::LinkRuntime(pScript, pRuntimePath)) {
     ALOGE("Failed to link script '%s' with Renderscript runtime!", pScriptName);
     return NULL;
   }
@@ -228,12 +243,16 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   //===--------------------------------------------------------------------===//
   // Open the output file for write.
   //===--------------------------------------------------------------------===//
-  OutputFile *output_file =
-      new (std::nothrow) OutputFile(pOutputPath, FileBase::kTruncate);
+  unsigned flags = FileBase::kTruncate;
+  if (mDebugContext) {
+    // Delete the cache file when we finish up under a debug context.
+    flags |= FileBase::kDeleteOnClose;
+  }
+  OutputFile *output_file = new (std::nothrow) OutputFile(pOutputPath, flags);
 
   if ((output_file == NULL) || output_file->hasError()) {
-    ALOGE("Unable to open the %s for write! (%s)", pOutputPath,
-          output_file->getErrorMessage().c_str());
+      ALOGE("Unable to open %s for write! (%s)", pOutputPath,
+            output_file->getErrorMessage().c_str());
     delete info;
     delete output_file;
     return NULL;
@@ -273,6 +292,12 @@ RSCompilerDriver::compileScript(RSScript &pScript,
           Compiler::GetErrorString(compile_result));
     delete info;
     delete output_file;
+    return NULL;
+  }
+
+  // No need to produce an RSExecutable in this case.
+  // TODO: Error handling in this case is nonexistent.
+  if (pSkipLoad) {
     return NULL;
   }
 
@@ -317,8 +342,10 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
                                       const char *pCacheDir,
                                       const char *pResName,
                                       const char *pBitcode,
-                                      size_t pBitcodeSize) {
-  android::StopWatch build_time("bcc: RSCompilerDriver::build time");
+                                      size_t pBitcodeSize,
+                                      const char *pRuntimePath,
+                                      RSLinkRuntimeCallback pLinkRuntimeCallback) {
+    //  android::StopWatch build_time("bcc: RSCompilerDriver::build time");
   //===--------------------------------------------------------------------===//
   // Check parameters.
   //===--------------------------------------------------------------------===//
@@ -360,11 +387,16 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
   //===--------------------------------------------------------------------===//
   // Load cache.
   //===--------------------------------------------------------------------===//
-  RSExecutable *result = loadScriptCache(output_path.c_str(), dep_info);
+  RSExecutable *result = NULL;
 
-  if (result != NULL) {
-    // Cache hit
-    return result;
+  // Skip loading from the cache if we are using a debug context.
+  if (!mDebugContext) {
+    result = loadScriptCache(output_path.c_str(), dep_info);
+
+    if (result != NULL) {
+      // Cache hit
+      return result;
+    }
   }
 
   //===--------------------------------------------------------------------===//
@@ -384,6 +416,8 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
     return NULL;
   }
 
+  script->setLinkRuntimeCallback(pLinkRuntimeCallback);
+
   // Read information from bitcode wrapper.
   bcinfo::BitcodeWrapper wrapper(pBitcode, pBitcodeSize);
   script->setCompilerVersion(wrapper.getCompilerVersion());
@@ -393,7 +427,8 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
   //===--------------------------------------------------------------------===//
   // Compile the script
   //===--------------------------------------------------------------------===//
-  result = compileScript(*script, pResName, output_path.c_str(), dep_info);
+  result = compileScript(*script, pResName, output_path.c_str(), pRuntimePath,
+                         dep_info, false);
 
   // Script is no longer used. Free it to get more memory.
   delete script;
@@ -404,3 +439,28 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
 
   return result;
 }
+
+void
+RSCompilerDriver::loadPlugin(const char *pLibName) {
+  llvm::PluginLoader() = pLibName;
+}
+
+
+RSExecutable *RSCompilerDriver::build(RSScript &pScript, const char *pOut,
+                                      const char *pRuntimePath) {
+  RSInfo::DependencyTableTy dep_info;
+  RSInfo *info = RSInfo::ExtractFromSource(pScript.getSource(), dep_info);
+  if (info == NULL) {
+    return NULL;
+  }
+  pScript.setInfo(info);
+
+  // Embed the info string directly in the ELF, since this path is for an
+  // offline (host) compilation.
+  pScript.setEmbedInfo(true);
+
+  RSExecutable *result = compileScript(pScript, pOut, pOut, pRuntimePath,
+                                       dep_info, true);
+  return result;
+}
+

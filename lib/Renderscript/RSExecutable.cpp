@@ -24,15 +24,16 @@
 #include "bcc/ExecutionEngine/SymbolResolverProxy.h"
 
 #include <utils/String8.h>
+#include <utils/FileMap.h>
 
 using namespace bcc;
 
 const char *RSExecutable::SpecialFunctionNames[] = {
-  "root",
-  "init",
-  ".rs.dtor",
-  // Must be NULL-terminated.
-  NULL
+  "root",      // Graphics drawing function or compute kernel.
+  "init",      // Initialization routine called implicitly on startup.
+  ".rs.dtor",  // Static global destructor for a script instance.
+  ".rs.info",  // Variable containing string of RS metadata info.
+  NULL         // Must be NULL-terminated.
 };
 
 RSExecutable *RSExecutable::Create(RSInfo &pInfo,
@@ -69,8 +70,8 @@ RSExecutable *RSExecutable::Create(RSInfo &pInfo,
     const char *name = *var_iter;
     void *addr = result->getSymbolAddress(name);
     if (addr == NULL) {
-      ALOGW("RS export var at entry #%u named %s cannot be found in the result "
-            "object!", idx, name);
+        //ALOGW("RS export var at entry #%u named %s cannot be found in the result "
+        //"object!", idx, name);
     }
     result->mExportVarAddrs.push_back(addr);
   }
@@ -86,8 +87,8 @@ RSExecutable *RSExecutable::Create(RSInfo &pInfo,
     const char *name = *func_iter;
     void *addr = result->getSymbolAddress(name);
     if (addr == NULL) {
-      ALOGW("RS export func at entry #%u named %s cannot be found in the result"
-            " object!", idx, name);
+        //      ALOGW("RS export func at entry #%u named %s cannot be found in the result"
+        //" object!", idx, name);
     }
     result->mExportFuncAddrs.push_back(addr);
   }
@@ -105,8 +106,8 @@ RSExecutable *RSExecutable::Create(RSInfo &pInfo,
     expanded_func_name.append(".expand");
     void *addr = result->getSymbolAddress(expanded_func_name.string());
     if (addr == NULL) {
-      ALOGW("Expanded RS foreach at entry #%u named %s cannot be found in the "
-            "result object!", idx, expanded_func_name.string());
+        //      ALOGW("Expanded RS foreach at entry #%u named %s cannot be found in the "
+        //            "result object!", idx, expanded_func_name.string());
     }
     result->mExportForeachFuncAddrs.push_back(addr);
   }
@@ -122,6 +123,47 @@ RSExecutable *RSExecutable::Create(RSInfo &pInfo,
   }
 
   return result;
+}
+
+size_t RSExecutable::retrieveObjFileSize() const {
+  return mObjFile->getSize();
+}
+
+bool RSExecutable::retrieveObjFile(void *pDst, size_t uDataLen) {
+  if(!pDst || !uDataLen)
+    return false;
+
+  size_t file_size;
+  android::FileMap *file_map = NULL;
+
+  // Check the inputs.
+  if (mObjFile->hasError()) {
+    return false;
+  }
+
+  // Get the file size.
+  file_size = mObjFile->getSize();
+  if (mObjFile->hasError()) {
+    return false;
+  }
+
+  // Abort on empty file or not enough space
+  if (file_size <= 0 || file_size > uDataLen) {
+    return false;
+  }
+
+  // Create memory map for the input file.
+  file_map = mObjFile->createMap(0, file_size, /* pIsReadOnly */true);
+  if ((file_map == NULL) || mObjFile->hasError())  {
+    return false;
+  }
+
+  // Copy data to output ptr
+  memcpy(pDst, file_map->getDataPtr(), file_size);
+
+  // file_map is no longer needed
+  file_map->release();
+  return true;
 }
 
 bool RSExecutable::syncInfo(bool pForce) {
@@ -169,8 +211,8 @@ void RSExecutable::dumpDisassembly(OutputFile &pOutput) const {
   android::Vector<const char *> func_list;
 
   if (!mLoader->getSymbolNameList(func_list, ObjectLoader::kFunctionType)) {
-    ALOGW("Failed to get the list of function name in %s for disassembly!",
-          mObjFile->getName().c_str());
+      ALOGW("Failed to get the list of function name in %s for disassembly!",
+            mObjFile->getName().c_str());
   } else {
     // Disassemble each function
     for (size_t i = 0, e = func_list.size(); i != e; i++) {
@@ -186,12 +228,12 @@ void RSExecutable::dumpDisassembly(OutputFile &pOutput) const {
                       reinterpret_cast<const uint8_t *>(func), func_size);
 
       if (result != kDisassembleSuccess) {
-        ALOGW("Failed to disassemble the function %s in %s (error code=%zu)!",
-              func_name, mObjFile->getName().c_str(), static_cast<size_t>(result));
+          ALOGW("Failed to disassemble the function %s in %s (error code=%zu)!",
+                func_name, mObjFile->getName().c_str(), static_cast<size_t>(result));
 
         if (result != kDisassembleInvalidInstruction) {
-          ALOGW("And the error occured in disassembler is fatal. Abort "
-                "disassembler on remaining functions!");
+            ALOGW("And the error occured in disassembler is fatal. Abort "
+                  "disassembler on remaining functions!");
           break;
         }
       }
