@@ -317,6 +317,12 @@ bool ABCCompilerDriver::build(int pInputFd, int pOutputFd) {
 	// Open abcc's output in a raw_ostream and copy bitcode into it.
     llvm::raw_ostream *abcc_output =
         new (std::nothrow) llvm::raw_fd_ostream(pOutputFd, false);
+    if (abcc_output == NULL) {
+      ALOGE("Failed to prepare the abcc output for USC.");
+      delete script;
+      return false;
+    }
+
     (*abcc_output) << output_relocatable;
     delete abcc_output;
   }
