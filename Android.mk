@@ -51,6 +51,15 @@ libmcld_STATIC_LIBRARIES += \
   libmcldADT \
   libmcldLD
 
+rs_vectorizer_STATIC_LIBRARIES := \
+  libpasses \
+  libmetadata_api \
+  libname_mangle \
+  libreflection_module \
+  libLLVMVectorizer
+
+rs_vectorizer_STATIC_LIBRARIES_HOST  := $(addsuffix _host, $(notdir $(rs_vectorizer_STATIC_LIBRARIES)))
+
 #=====================================================================
 # Calculate SHA1 checksum for libbcc.so, libRS.so and libclcore.bc
 #=====================================================================
@@ -121,11 +130,7 @@ else
         libmcldX86Target \
         libmcldX86Info \
         libsupc++ \
-        libpasses \
-        libmetadata_api \
-        libname_mangle \
-        libreflection_module \
-        libLLVMVectorizer
+        $(rs_vectorizer_STATIC_LIBRARIES)
     else
       $(error Unsupported TARGET_ARCH $(TARGET_ARCH))
     endif
@@ -182,11 +187,7 @@ LOCAL_WHOLE_STATIC_LIBRARIES += \
 LOCAL_WHOLE_STATIC_LIBRARIES += $(libmcld_STATIC_LIBRARIES)
 
 LOCAL_WHOLE_STATIC_LIBRARIES += \
-  libpasses \
-  libmetadata_api \
-  libname_mangle \
-  libreflection_module \
-  libLLVMVectorizer
+  $(rs_vectorizer_STATIC_LIBRARIES_HOST)
 
 LOCAL_STATIC_LIBRARIES += \
   libutils \
