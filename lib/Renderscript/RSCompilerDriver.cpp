@@ -37,6 +37,8 @@
 #include <utils/String8.h>
 #include <utils/StopWatch.h>
 
+#include "bcc/Renderscript/RSVectorizationSupport.h"
+
 using namespace bcc;
 
 namespace {
@@ -221,6 +223,38 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   // to do some transformation (e.g., expand foreach-able function.)
   pScript.setInfo(info);
 
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+  //===--------------------------------------------------------------------===//
+  // Setup the config to the compiler.
+  //===--------------------------------------------------------------------===//
+  bool compiler_need_reconfigure = setupConfig(pScript);
+
+  if (mConfig == NULL) {
+    ALOGE("Failed to setup config for RS compiler to compile %s!", pOutputPath);
+    delete info;
+    return NULL;
+  }
+
+  // Compiler need to re-config if it's haven't run the config() yet or the
+  // configuration it referenced is changed.
+  if (compiler_need_reconfigure) {
+    Compiler::ErrorCode err = mCompiler.config(*mConfig);
+    if (err != Compiler::kSuccess) {
+      ALOGE("Failed to config the RS compiler for %s! (%s)",pOutputPath,
+            Compiler::GetErrorString(err));
+      delete info;
+      return NULL;
+    }
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Perform pre-compilation transformation on the input script bitcode
+  //===--------------------------------------------------------------------===//
+  // This is required in order to make the code suitable for vectorization and
+  // before linking the builtin's implementation to the script bitcode
+  mCompiler.performCodeTransformations(pScript);
+#endif
+
   //===--------------------------------------------------------------------===//
   // Link RS script with Renderscript runtime.
   //===--------------------------------------------------------------------===//
@@ -258,6 +292,7 @@ RSCompilerDriver::compileScript(RSScript &pScript,
     return NULL;
   }
 
+#ifndef ENABLE_VECTORIZATION_SUPPORT
   //===--------------------------------------------------------------------===//
   // Setup the config to the compiler.
   //===--------------------------------------------------------------------===//
@@ -282,6 +317,7 @@ RSCompilerDriver::compileScript(RSScript &pScript,
       return NULL;
     }
   }
+#endif
 
   //===--------------------------------------------------------------------===//
   // Run the compiler.
@@ -388,10 +424,10 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
   // Load cache.
   //===--------------------------------------------------------------------===//
   RSExecutable *result = NULL;
-
+  // TODO JROSE - DEBUG HACK in place - Needs to be fixed before submission
   // Skip loading from the cache if we are using a debug context.
   if (!mDebugContext) {
-    result = loadScriptCache(output_path.c_str(), dep_info);
+    result = NULL; //loadScriptCache(output_path.c_str(), dep_info);
 
     if (result != NULL) {
       // Cache hit

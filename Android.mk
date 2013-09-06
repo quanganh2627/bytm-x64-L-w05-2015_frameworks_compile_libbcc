@@ -21,6 +21,13 @@ LOCAL_PATH := $(call my-dir)
 LIBBCC_ROOT_PATH := $(LOCAL_PATH)
 include $(LIBBCC_ROOT_PATH)/libbcc.mk
 
+ifeq ($(TARGET_ARCH),x86)
+	include $(CLEAR_VARS)
+	LOCAL_PREBUILT_LIBS :=  ../../../prebuilts/ndk/8/sources/cxx-stl/gnu-libstdc++/libs/x86/libsupc++.a
+	LOCAL_MODULE_TAGS := optional
+	include $(BUILD_MULTI_PREBUILT)
+	include $(CLEAR_VARS)
+endif
 #=====================================================================
 # Whole Static Library to Be Linked In
 #=====================================================================
@@ -43,6 +50,15 @@ libmcld_STATIC_LIBRARIES += \
   libmcldSupport \
   libmcldADT \
   libmcldLD
+
+rs_vectorizer_STATIC_LIBRARIES := \
+  libpasses \
+  libmetadata_api \
+  libname_mangle \
+  libreflection_module \
+  libLLVMVectorizer
+
+rs_vectorizer_STATIC_LIBRARIES_HOST  := $(addsuffix _host, $(notdir $(rs_vectorizer_STATIC_LIBRARIES)))
 
 #=====================================================================
 # Calculate SHA1 checksum for libbcc.so, libRS.so and libclcore.bc
@@ -112,7 +128,9 @@ else
     ifeq ($(TARGET_ARCH),x86) # We don't support x86-64 right now
       LOCAL_WHOLE_STATIC_LIBRARIES += \
         libmcldX86Target \
-        libmcldX86Info
+        libmcldX86Info \
+        libsupc++ \
+        $(rs_vectorizer_STATIC_LIBRARIES)
     else
       $(error Unsupported TARGET_ARCH $(TARGET_ARCH))
     endif
@@ -167,6 +185,9 @@ LOCAL_WHOLE_STATIC_LIBRARIES += \
   libmcldX86Info
 
 LOCAL_WHOLE_STATIC_LIBRARIES += $(libmcld_STATIC_LIBRARIES)
+
+LOCAL_WHOLE_STATIC_LIBRARIES += \
+  $(rs_vectorizer_STATIC_LIBRARIES_HOST)
 
 LOCAL_STATIC_LIBRARIES += \
   libutils \

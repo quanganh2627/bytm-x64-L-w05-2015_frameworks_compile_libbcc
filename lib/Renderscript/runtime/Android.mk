@@ -55,10 +55,16 @@ ifeq ($(ARCH_X86_HAVE_SSE2), true)
 
     ifeq ($(ARCH_X86_HAVE_SSE3), true)
         clcore_x86_files += arch/x86_dot_length.ll
+        clcore_x86_files += arch/x86_v8_vectorizer.ll
     else
         # FIXME: without SSE3, it is still able to get better code through PSHUFD. But,
         # so far, there is no such device with SSE2 only.
         clcore_x86_files += arch/dot_length.c
+    endif
+
+    ifeq ($(ARCH_X86_HAVE_SSE4), true)
+        # adding these transposes is optional but it will impact the performance on SSE4
+        clcore_x86_files += arch/x86_v8_vectorizer_sse4_transposes.ll
     endif
 endif
 
