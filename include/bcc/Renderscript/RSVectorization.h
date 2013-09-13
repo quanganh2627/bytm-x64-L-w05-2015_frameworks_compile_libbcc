@@ -19,4 +19,7 @@
 
 #define ENABLE_VECTORIZATION_SUPPORT
 
+// turn on the hueristic
+#define __VECTORIZER_HUERISTIC
+
 #endif // BCC_RS_VECTORIZATION_H

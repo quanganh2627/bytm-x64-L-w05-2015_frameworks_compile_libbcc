@@ -59,7 +59,8 @@ private:
          Signature, llvm::Function* idFunc);
   static llvm::Function* createKernelWrapper(llvm::Function* F, unsigned int
          Signture);
-  static void doFunctionOptimizations(llvm::Module* M);
+  static void doFunctionPreOptimizations(llvm::Module* M);
+  static void doFunctionPostOptimizations(llvm::Module* M);
 };
 
 } // end namespace bcc

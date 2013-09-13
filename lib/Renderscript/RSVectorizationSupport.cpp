@@ -61,6 +61,7 @@
 #include "llvm/DebugInfo.h"
 
 #include "bcc/Renderscript/RSVectorizationSupport.h"
+#include "bcc/Renderscript/RSVectorization.h"
 #include <vector>
 
 #include <cutils/properties.h>
@@ -78,7 +79,7 @@ namespace intel {
 class OptimizerConfig;
 }
 
-extern "C" intel::OptimizerConfig* createRenderscriptConfiguration();
+extern "C" intel::OptimizerConfig* createRenderscriptConfiguration(int width);
 extern "C" void deleteRenderscriptConfiguration(intel::OptimizerConfig*& pConfig);
 
 extern "C" void* createRenderscriptRuntimeSupport(const llvm::Module *runtimeModule);
@@ -90,7 +91,7 @@ extern "C" llvm::Pass *createRenderscriptVectorizerPass(const llvm::Module *runt
   llvm::SmallVectorImpl<int> &optimizerWidths);
 
 extern "C" void* createShuffleCallToInstPass();
-
+extern "C" void* createPreventDivisionCrashesPass();
 // end   - x86-vectorizer library api
 
 using namespace bcc;
@@ -933,9 +934,6 @@ bool RSVectorizationSupport::prepareModuleForVectorization(const RSInfo *info,
   bccAssert(info);
   bccAssert(M);
 
-  dumpDebugPoint("PREPARE", "START");
-  dumpModule("MODULE", "BR_V", *M);
-
   // in case there is no exported foreach functions no need to do anything with
   // the given module
   RSInfo::ExportForeachFuncListTy::const_iterator it_begin =
@@ -980,26 +978,34 @@ bool RSVectorizationSupport::prepareModuleForVectorization(const RSInfo *info,
     if (NULL != indexedFunc) {
       // pass the indexed function ptr to the vectorizer
       llvm::ArrayRef<llvm::Value*> values(indexedFunc);
-
-      // JROSE: Crash path starts here: Value type is getting corrupted in some way
       llvm::MDNode* Node = llvm::MDNode::get(M->getContext(), values);
       kernels->addOperand(Node);
     }
   }
 
-  doFunctionOptimizations(M);
+  doFunctionPreOptimizations(M);
   inlineFunctions(M);
-
-  dumpModule("MODULE", "BR_E", *M);
-  dumpDebugPoint("PREPARE", "END");
 
   return true;
 }
+
 #pragma GCC pop_options
 
-void RSVectorizationSupport::doFunctionOptimizations(llvm::Module* M) {
+void RSVectorizationSupport::doFunctionPreOptimizations(llvm::Module* M) {
   llvm::FunctionPassManager fpm = llvm::FunctionPassManager(M);
   void* functionOptimizationPass = createShuffleCallToInstPass();
+
+  fpm.add((llvm::Pass*)functionOptimizationPass);
+
+  for(llvm::Module::iterator it = M->begin(); it != M->end(); ++it) {
+    if(it->isDeclaration()) continue;
+    fpm.run(*it);
+  }
+}
+
+void RSVectorizationSupport::doFunctionPostOptimizations(llvm::Module* M) {
+  llvm::FunctionPassManager fpm = llvm::FunctionPassManager(M);
+  void* functionOptimizationPass = createPreventDivisionCrashesPass();
 
   fpm.add((llvm::Pass*)functionOptimizationPass);
 
@@ -1085,14 +1091,17 @@ bool RSVectorizationSupport::vectorizeModule(llvm::Module& M,
   llvm::SmallVector<int, 4>& vectorizedWidths) {
   llvm::PassManager passes;
 
-  dumpDebugPoint("VECTORIZE", "START");
-  dumpModule("MODULE", "ST_V", M);
-
   // shortcut if there is no indexed kernels to vectorize
   llvm::NamedMDNode *KernelsMD = M.getNamedMetadata("rs.indexed.kernels");
   if (NULL == KernelsMD || 0 == KernelsMD->getNumOperands()) return false;
 
-  intel::OptimizerConfig* vectorizerConfig = createRenderscriptConfiguration();
+#ifdef __VECTORIZER_HUERISTIC
+  int width = 0;
+#else
+  int width = 4;
+#endif
+
+  intel::OptimizerConfig* vectorizerConfig = createRenderscriptConfiguration(width);
   llvm::LLVMContext &BuiltinsContext = M.getContext();
 
   llvm::SMDiagnostic Err;
@@ -1109,12 +1118,8 @@ bool RSVectorizationSupport::vectorizeModule(llvm::Module& M,
   BuiltinsModuleAuto.reset(builtinsModule);
   createRenderscriptRuntimeSupport(BuiltinsModuleAuto.get());
 
-  dumpDebugPoint("VECTORIZE", "RT");
-
   // as a first integration phase inline the built-ins
   RSVectorizationSupport::inlineFunctions(&M);
-
-  dumpDebugPoint("VECTORIZE", "INLINE");
 
   // calling the vectorizer on the script module
   llvm::Pass *vectorizerPass = createRenderscriptVectorizerPass(BuiltinsModuleAuto.get(),
@@ -1125,13 +1130,9 @@ bool RSVectorizationSupport::vectorizeModule(llvm::Module& M,
   passes.add(vectorizerPass);
   passes.run(M);
 
-  dumpDebugPoint("VECTORIZE", "RUN");
-  dumpModule("MODULE", "ST_E", M);
-
   deleteRenderscriptConfiguration(vectorizerConfig);
   destroyRenderscriptRuntimeSupport();
 
-  dumpDebugPoint("VECTORIZE", "END");
-
+  doFunctionPostOptimizations(&M);
   return true;
 }
