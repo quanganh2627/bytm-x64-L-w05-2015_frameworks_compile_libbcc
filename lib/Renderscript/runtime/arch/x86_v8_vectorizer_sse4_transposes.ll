@@ -1,3 +1,6 @@
+declare <4 x i32> @_Z8shuffle2Dv4_iS_Dv4_j(<4 x i32> %x, <4 x i32> %y, <4 x i32> %mask) nounwind readnone
+declare <2 x i64> @llvm.x86.sse2.psrl.dq(<2 x i64>, i32) nounwind readnone
+declare <4 x float> @llvm.x86.sse41.blendps(<4 x float>, <4 x float>, i32) nounwind readnone
 
 define void @__ocl_gather_transpose_char4x8(<4 x i8>* nocapture %pLoadAdd0, <4 x i8>* nocapture %pLoadAdd1, <4 x i8>* nocapture %pLoadAdd2, <4 x i8>* nocapture %pLoadAdd3, <4 x i8>* nocapture %pLoadAdd4, <4 x i8>* nocapture %pLoadAdd5, <4 x i8>* nocapture %pLoadAdd6, <4 x i8>* nocapture %pLoadAdd7, <8 x i8>* nocapture %xOut, <8 x i8>* nocapture %yOut, <8 x i8>* nocapture %zOut, <8 x i8>* nocapture %wOut) nounwind alwaysinline {
 entry:
@@ -56,13 +59,13 @@ entry:
   %call5.i.i = tail call <4 x i32> @_Z8shuffle2Dv4_iS_Dv4_j(<4 x i32> %astype.i.i, <4 x i32> %astype1.i.i, <4 x i32> <i32 2, i32 6, i32 3, i32 7>) nounwind readnone
   %astype6.i.i = bitcast <4 x i32> %call5.i.i to <16 x i8>
   %40 = shufflevector <16 x i8> %astype2.i.i, <16 x i8> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
-  store <8 x i8> %40, <8 x i8>* %xOut, align 8, !tbaa !1
+  store <8 x i8> %40, <8 x i8>* %xOut, align 8
   %41 = shufflevector <16 x i8> %astype2.i.i, <16 x i8> undef, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
-  store <8 x i8> %41, <8 x i8>* %yOut, align 8, !tbaa !1
+  store <8 x i8> %41, <8 x i8>* %yOut, align 8
   %42 = shufflevector <16 x i8> %astype6.i.i, <16 x i8> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
-  store <8 x i8> %42, <8 x i8>* %zOut, align 8, !tbaa !1
+  store <8 x i8> %42, <8 x i8>* %zOut, align 8
   %43 = shufflevector <16 x i8> %astype6.i.i, <16 x i8> undef, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
-  store <8 x i8> %43, <8 x i8>* %wOut, align 8, !tbaa !1
+  store <8 x i8> %43, <8 x i8>* %wOut, align 8
   ret void
 }
 
@@ -92,19 +95,19 @@ entry:
   %18 = tail call <4 x float> @llvm.x86.sse41.blendps(<4 x float> %16, <4 x float> %17, i32 8)
   %astype9 = bitcast <4 x float> %18 to <16 x i8>
   %19 = shufflevector <16 x i8> %astype9, <16 x i8> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
-  store <4 x i8> %19, <4 x i8>* %xOut, align 4, !tbaa !1
+  store <4 x i8> %19, <4 x i8>* %xOut, align 4
   %20 = bitcast <4 x float> %18 to <2 x i64>
   %21 = tail call <2 x i64> @llvm.x86.sse2.psrl.dq(<2 x i64> %20, i32 8) nounwind
   %astype.i = bitcast <2 x i64> %21 to <16 x i8>
   %22 = shufflevector <16 x i8> %astype.i, <16 x i8> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
-  store <4 x i8> %22, <4 x i8>* %yOut, align 4, !tbaa !1
+  store <4 x i8> %22, <4 x i8>* %yOut, align 4
   %23 = tail call <2 x i64> @llvm.x86.sse2.psrl.dq(<2 x i64> %21, i32 8) nounwind
   %astype2.i = bitcast <2 x i64> %23 to <16 x i8>
   %24 = shufflevector <16 x i8> %astype2.i, <16 x i8> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
-  store <4 x i8> %24, <4 x i8>* %zOut, align 4, !tbaa !1
+  store <4 x i8> %24, <4 x i8>* %zOut, align 4
   %25 = tail call <2 x i64> @llvm.x86.sse2.psrl.dq(<2 x i64> %23, i32 8) nounwind
   %astype4.i = bitcast <2 x i64> %25 to <16 x i8>
   %26 = shufflevector <16 x i8> %astype4.i, <16 x i8> undef, <4 x i32> <i32 0, i32 4, i32 8, i32 12>
-  store <4 x i8> %26, <4 x i8>* %wOut, align 4, !tbaa !1
+  store <4 x i8> %26, <4 x i8>* %wOut, align 4
   ret void
 }
