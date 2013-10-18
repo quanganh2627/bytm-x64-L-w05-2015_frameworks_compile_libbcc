@@ -337,7 +337,7 @@ public:
     if(useNewExpand) {
       // vector steps
       llvm::Value *V_InStep =
-          Builder.CreateMul(Arg_instep, llvm::ConstantInt::get(Int32Ty, 4));
+          Builder.CreateMul(InStep, llvm::ConstantInt::get(Int32Ty, 4));
       llvm::Value *V_OutStep =
           Builder.CreateMul(Arg_outstep, llvm::ConstantInt::get(Int32Ty, 4));
 
@@ -398,10 +398,6 @@ public:
 
       if (InPtr) {
         // InPtr += instep X 4
-        // TODO[MA]: need to move 4 elements ; there is a bug in the org code
-        //           currently it moves by 4 bytes without checking the outstep
-        //           value, the vectorized code move by 4 X outstep this may
-        //           raise mismatch bug
         llvm::Value *NewIn = Builder.CreateIntToPtr(Builder.CreateNUWAdd(
             Builder.CreatePtrToInt(InPtr, Int32Ty), V_InStep), InTy);
         Builder.CreateStore(NewIn, AIn);
@@ -409,10 +405,6 @@ public:
 
       if (OutPtr) {
         // OutPtr += outstep X 4
-        // TODO[MA]: need to move 4 elements ; there is a bug in the org code
-        //           currently it moves by 4 bytes without checking the outstep
-        //           value, the vectorized code move by 4 X outstep this may
-        //           raise mismatch bug
         llvm::Value *NewOut = Builder.CreateIntToPtr(Builder.CreateNUWAdd(
             Builder.CreatePtrToInt(OutPtr, Int32Ty), V_OutStep), OutTy);
         Builder.CreateStore(NewOut, AOut);
@@ -784,8 +776,8 @@ public:
 
           if(useScalarVersion) {
             // roll-back to the normal scalar version
-        Changed |= ExpandKernel(kernel, signature);
-      }
+            Changed |= ExpandKernel(kernel, signature);
+          }
           else {
             Changed |= ExpandFunction(kernel, wrapperFunction, signature, true, vecWrapper);
           }
