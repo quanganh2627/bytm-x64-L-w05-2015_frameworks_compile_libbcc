@@ -27,6 +27,7 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Scalar.h>
+#include <llvm/Target/TargetLibraryInfo.h>
 
 #include "bcc/Script.h"
 #include "bcc/Source.h"
@@ -210,6 +211,11 @@ enum Compiler::ErrorCode Compiler::runCodeGen(Script &pScript,
   data_layout = new (std::nothrow) llvm::DataLayout(*mTarget->getDataLayout());
   if (data_layout == NULL) {
     return kErrDataLayoutNoMemory;
+  }
+
+  // If compiling for USC, create Target Library Info here to provide it the Triple
+  if (!getTargetMachine().getTargetTriple().compare("usc")) {
+    codegen_passes.add(new llvm::TargetLibraryInfo(llvm::Triple("usc")));
   }
 
   // Add DataLayout to the pass manager.
