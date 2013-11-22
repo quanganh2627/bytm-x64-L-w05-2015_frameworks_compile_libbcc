@@ -33,8 +33,6 @@
 #include "bcc/Support/Log.h"
 #include "bcc/Support/OutputFile.h"
 
-#include "bcc/Renderscript/RSVectorizationSupport.h"
-
 using namespace bcc;
 
 const char *Compiler::GetErrorString(enum ErrorCode pErrCode) {
@@ -170,8 +168,7 @@ enum Compiler::ErrorCode Compiler::runLTO(Script &pScript) {
   lto_passes.add(data_layout);
 
   // Invokde "beforeAddLTOPasses" before adding the first pass.
-  if (!beforeAddLTOPasses(pScript, lto_passes,
-                          mTarget->getTargetTriple().data())) {
+  if (!beforeAddLTOPasses(pScript, lto_passes)) {
     return kErrHookBeforeAddLTOPasses;
   }
 
@@ -265,7 +262,7 @@ enum Compiler::ErrorCode Compiler::runLTO(Script &pScript) {
   }
 
   // Invokde "beforeExecuteLTOPasses" before executing the passes.
-  if (!beforeExecuteLTOPasses(pScript, lto_passes, mTarget->getTargetTriple().data())) {
+  if (!beforeExecuteLTOPasses(pScript, lto_passes)) {
     return kErrHookBeforeExecuteLTOPasses;
   }
 
@@ -328,17 +325,6 @@ enum Compiler::ErrorCode Compiler::runCodeGen(Script &pScript,
 
   return kSuccess;
 }
-
-#ifdef ENABLE_VECTORIZATION_SUPPORT
-void Compiler::dbgPoint(const char* tag, const char* title) {
-  RSVectorizationSupport::dumpDebugPoint(tag, title);
-}
-
-void Compiler::dumpScript(const char* tag, const char* title, Script &pScript) {
-  llvm::Module& module = pScript.getSource().getModule();
-  RSVectorizationSupport::dumpModule(tag, title, module);
-}
-#endif
 
 enum Compiler::ErrorCode Compiler::compile(Script &pScript,
                                            llvm::raw_ostream &pResult) {

@@ -17,7 +17,6 @@
 #include "bcc/Renderscript/RSCompilerDriver.h"
 
 #include <llvm/Support/Path.h>
-#include <llvm/Support/PluginLoader.h>
 
 #include "bcinfo/BitcodeWrapper.h"
 
@@ -36,8 +35,6 @@
 #include <cutils/properties.h>
 #include <utils/String8.h>
 #include <utils/StopWatch.h>
-
-#include "bcc/Renderscript/RSVectorizationSupport.h"
 
 using namespace bcc;
 
@@ -64,7 +61,7 @@ bool is_force_recompile() {
 } // end anonymous namespace
 
 RSCompilerDriver::RSCompilerDriver(bool pUseCompilerRT) :
-    mConfig(NULL), mCompiler(), mDefaultTriple(NULL), mDefaultLibrary(NULL), mCompilerRuntime(NULL), mDebugContext(false) {
+    mConfig(NULL), mCompiler(), mCompilerRuntime(NULL), mDebugContext(false) {
   init::Initialize();
   // Chain the symbol resolvers for compiler_rt and RS runtimes.
   if (pUseCompilerRT) {
@@ -166,10 +163,7 @@ bool RSCompilerDriver::setupConfig(const RSScript &pScript) {
     }
   } else {
     // Haven't run the compiler ever.
-    if (mDefaultTriple) // Preference the default triple if set through setRSDefaultCompilerTriple
-      mConfig = new (std::nothrow) CompilerConfig(mDefaultTriple);
-    else
-      mConfig = new (std::nothrow) DefaultCompilerConfig();
+    mConfig = new (std::nothrow) DefaultCompilerConfig();
     if (mConfig == NULL) {
       // Return false since mConfig remains NULL and out-of-memory.
       return false;
@@ -202,10 +196,6 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   RSExecutable *result = NULL;
   RSInfo *info = NULL;
 
-  if (mDefaultLibrary) {
-	pScript.setPreferredLibrary(mDefaultLibrary);
-  }
-
   //===--------------------------------------------------------------------===//
   // Extract RS-specific information from source bitcode.
   //===--------------------------------------------------------------------===//
@@ -222,38 +212,6 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   // This is required since RS compiler may need information in the info file
   // to do some transformation (e.g., expand foreach-able function.)
   pScript.setInfo(info);
-
-#ifdef ENABLE_VECTORIZATION_SUPPORT
-  //===--------------------------------------------------------------------===//
-  // Setup the config to the compiler.
-  //===--------------------------------------------------------------------===//
-  bool compiler_need_reconfigure = setupConfig(pScript);
-
-  if (mConfig == NULL) {
-    ALOGE("Failed to setup config for RS compiler to compile %s!", pOutputPath);
-    delete info;
-    return NULL;
-  }
-
-  // Compiler need to re-config if it's haven't run the config() yet or the
-  // configuration it referenced is changed.
-  if (compiler_need_reconfigure) {
-    Compiler::ErrorCode err = mCompiler.config(*mConfig);
-    if (err != Compiler::kSuccess) {
-      ALOGE("Failed to config the RS compiler for %s! (%s)",pOutputPath,
-            Compiler::GetErrorString(err));
-      delete info;
-      return NULL;
-    }
-  }
-
-  //===--------------------------------------------------------------------===//
-  // Perform pre-compilation transformation on the input script bitcode
-  //===--------------------------------------------------------------------===//
-  // This is required in order to make the code suitable for vectorization and
-  // before linking the builtin's implementation to the script bitcode
-  mCompiler.performCodeTransformations(pScript);
-#endif
 
   //===--------------------------------------------------------------------===//
   // Link RS script with Renderscript runtime.
@@ -292,7 +250,6 @@ RSCompilerDriver::compileScript(RSScript &pScript,
     return NULL;
   }
 
-#ifndef ENABLE_VECTORIZATION_SUPPORT
   //===--------------------------------------------------------------------===//
   // Setup the config to the compiler.
   //===--------------------------------------------------------------------===//
@@ -317,7 +274,6 @@ RSCompilerDriver::compileScript(RSScript &pScript,
       return NULL;
     }
   }
-#endif
 
   //===--------------------------------------------------------------------===//
   // Run the compiler.
@@ -424,10 +380,10 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
   // Load cache.
   //===--------------------------------------------------------------------===//
   RSExecutable *result = NULL;
-  // TODO JROSE - DEBUG HACK in place - Needs to be fixed before submission
+
   // Skip loading from the cache if we are using a debug context.
   if (!mDebugContext) {
-    result = NULL; //loadScriptCache(output_path.c_str(), dep_info);
+    result = loadScriptCache(output_path.c_str(), dep_info);
 
     if (result != NULL) {
       // Cache hit
@@ -474,11 +430,6 @@ RSExecutable *RSCompilerDriver::build(BCCContext &pContext,
   }
 
   return result;
-}
-
-void
-RSCompilerDriver::loadPlugin(const char *pLibName) {
-  llvm::PluginLoader() = pLibName;
 }
 
 

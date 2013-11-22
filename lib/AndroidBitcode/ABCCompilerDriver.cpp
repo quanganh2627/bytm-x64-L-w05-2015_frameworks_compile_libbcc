@@ -19,7 +19,6 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Pass.h>
 #include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/PluginLoader.h>
 #include <llvm/Support/raw_ostream.h>
 #include <mcld/Config/Config.h>
 
@@ -42,7 +41,6 @@
 #if defined(PROVIDE_X86_CODEGEN)
 # include "X86/X86ABCCompilerDriver.h"
 #endif
-# include "USC/USCABCCompilerDriver.h"
 
 namespace bcc {
 
@@ -161,10 +159,6 @@ bool ABCCompilerDriver::compile(Script &pScript, llvm::raw_ostream &pOutput) {
     return false;
   }
 
-  /* If compiling for USC, enable LTO */
-  if (!mCompilerConfig->getTriple().compare("usc"))
-	  mCompiler.enableLTO(true);
-
   // Run the compiler.
   Compiler::ErrorCode result = mCompiler.compile(pScript, pOutput);
   if (result != Compiler::kSuccess) {
@@ -221,13 +215,6 @@ bool ABCCompilerDriver::link(const Script &pScript,
 
 ABCCompilerDriver *ABCCompilerDriver::Create(const std::string &pTriple) {
   std::string error;
-
-  /* If the triple is 'usc', begin by loading our plugin so it can be handled */
-  if (!pTriple.compare("usc"))
-  {
-	  llvm::PluginLoader() = "librsccompiler.so";
-  }
-
   const llvm::Target *target =
       llvm::TargetRegistry::lookupTarget(pTriple, error);
 
@@ -256,9 +243,6 @@ ABCCompilerDriver *ABCCompilerDriver::Create(const std::string &pTriple) {
       return new X86ABCCompilerDriver();
     }
 #endif
-    case llvm::Triple::usc: {
-      return new USCABCCompilerDriver();
-    }
     default: {
       ALOGE("Unknown architecture '%s' supplied in %s!", target->getName(),
             pTriple.c_str());
@@ -306,25 +290,11 @@ bool ABCCompilerDriver::build(int pInputFd, int pOutputFd) {
   delete output;
 
   //===--------------------------------------------------------------------===//
-  // Link or directly copy bitcode into abcc's output in the case of USC.
+  // Link.
   //===--------------------------------------------------------------------===//
-  if (mCompilerConfig->getTriple().compare("usc")) {
-    if (!link(*script, output_relocatable, pOutputFd)) {
-      delete script;
-      return false;
-    }
-  } else {
-	// Open abcc's output in a raw_ostream and copy bitcode into it.
-    llvm::raw_ostream *abcc_output =
-        new (std::nothrow) llvm::raw_fd_ostream(pOutputFd, false);
-    if (abcc_output == NULL) {
-      ALOGE("Failed to prepare the abcc output for USC.");
-      delete script;
-      return false;
-    }
-
-    (*abcc_output) << output_relocatable;
-    delete abcc_output;
+  if (!link(*script, output_relocatable, pOutputFd)) {
+    delete script;
+    return false;
   }
 
   //===--------------------------------------------------------------------===//

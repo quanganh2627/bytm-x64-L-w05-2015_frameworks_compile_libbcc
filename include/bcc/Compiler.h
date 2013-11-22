@@ -17,8 +17,6 @@
 #ifndef BCC_COMPILER_H
 #define BCC_COMPILER_H
 
-#include "bcc/Renderscript/RSVectorization.h"
-
 namespace llvm {
 
 class raw_ostream;
@@ -88,12 +86,6 @@ public:
   Compiler();
   Compiler(const CompilerConfig &pConfig);
 
-#ifdef ENABLE_VECTORIZATION_SUPPORT
-  /// used for debug purpose for RS\Vectorizer extention
-  void dbgPoint(const char* tag, const char* title);
-  void dumpScript(const char* tag, const char* title, Script &pScript);
-#endif
-
   enum ErrorCode config(const CompilerConfig &pConfig);
 
   // Compile a script and output the result to a LLVM stream.
@@ -115,9 +107,7 @@ protected:
   // Plugin callbacks for sub-class.
   //===--------------------------------------------------------------------===//
   // Called before adding first pass to code-generation passes.
-  virtual bool beforeAddLTOPasses(Script &pScript,
-                                  llvm::PassManager &pPM,
-                                  const char *mTriple)
+  virtual bool beforeAddLTOPasses(Script &pScript, llvm::PassManager &pPM)
   { return true; }
 
   // Called after adding last pass to code-generation passes.
@@ -126,8 +116,7 @@ protected:
 
   // Called before executing code-generation passes.
   virtual bool beforeExecuteLTOPasses(Script &pScript,
-                                      llvm::PassManager &pPM,
-                                      const char *mTriple)
+                                          llvm::PassManager &pPM)
   { return true; }
 
   // Called after executing code-generation passes.

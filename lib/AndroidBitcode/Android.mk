@@ -38,10 +38,6 @@ libbcc_x86_androidbitcode_SRC_FILES := \
   X86/X86ABCCompilerDriver.cpp \
   X86/X86ABCExpandVAArg.cpp
 
-libbcc_usc_androidbitcode_SRC_FILES := \
-  USC/USCABCCompilerDriver.cpp \
-  USC/USCABCExpandVAArg.cpp
-
 
 #=====================================================================
 # Device Static Library: libbccAndroidBitcode
@@ -68,8 +64,6 @@ else
   endif
 endif
 
-LOCAL_SRC_FILES += $(libbcc_usc_androidbitcode_SRC_FILES)
-
 include $(LIBBCC_DEVICE_BUILD_MK)
 include $(LIBBCC_GEN_CONFIG_MK)
 include $(MCLD_DEVICE_BUILD_MK)
@@ -89,7 +83,6 @@ LOCAL_SRC_FILES := \
   $(libbcc_arm_androidbitcode_SRC_FILES) \
   $(libbcc_mips_androidbitcode_SRC_FILES) \
   $(libbcc_x86_androidbitcode_SRC_FILES) \
-  $(libbcc_usc_androidbitcode_SRC_FILES) \
 
 include $(LIBBCC_HOST_BUILD_MK)
 include $(LIBBCC_GEN_CONFIG_MK)

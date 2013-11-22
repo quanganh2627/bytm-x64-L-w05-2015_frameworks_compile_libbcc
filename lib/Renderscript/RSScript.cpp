@@ -42,10 +42,6 @@ bool RSScript::LinkRuntime(RSScript &pScript, const char *rt_path) {
   }
 #endif
 
-  if (pScript.getPreferredLibrary()) {
-    core_lib = pScript.getPreferredLibrary();
-  }
-
   if (rt_path != NULL) {
     core_lib = rt_path;
   }
@@ -74,12 +70,11 @@ bool RSScript::LinkRuntime(RSScript &pScript, const char *rt_path) {
 RSScript::RSScript(Source &pSource)
   : Script(pSource), mInfo(NULL), mCompilerVersion(0),
     mOptimizationLevel(kOptLvl3), mLinkRuntimeCallback(NULL),
-    mEmbedInfo(false), mPreferredLibrary(NULL) { }
+    mEmbedInfo(false) { }
 
 bool RSScript::doReset() {
   mInfo = NULL;
   mCompilerVersion = 0;
   mOptimizationLevel = kOptLvl3;
-  mPreferredLibrary = NULL;
   return true;
 }

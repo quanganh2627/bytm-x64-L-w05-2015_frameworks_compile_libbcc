@@ -159,8 +159,6 @@ public:
   // executable file.
   static android::String8 GetPath(const FileBase &pFile);
 
-  static const char* GetCLCorePath();
-
   static const char LibBCCPath[];
   static const char LibCompilerRTPath[];
   static const char LibRSPath[];

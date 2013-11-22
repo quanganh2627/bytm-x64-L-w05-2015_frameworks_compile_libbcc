@@ -31,8 +31,7 @@ libbcc_renderscript_SRC_FILES := \
   RSInfoExtractor.cpp \
   RSInfoReader.cpp \
   RSInfoWriter.cpp \
-  RSScript.cpp \
-  RSVectorizationSupport.cpp
+  RSScript.cpp
 
 #=====================================================================
 # Device Static Library: libbccRenderscript
