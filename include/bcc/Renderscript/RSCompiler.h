@@ -19,13 +19,26 @@
 
 #include "bcc/Compiler.h"
 
+namespace llvm {
+  class Module;
+  class Function;
+};
+
 namespace bcc {
 
 class RSCompiler : public Compiler {
+public:
+  virtual bool performCodeTransformations(Script &pScript);
 private:
-  virtual bool beforeAddLTOPasses(Script &pScript, llvm::PassManager &pPM);
-  bool addInternalizeSymbolsPass(Script &pScript, llvm::PassManager &pPM);
-  bool addExpandForEachPass(Script &pScript, llvm::PassManager &pPM);
+  virtual bool beforeAddLTOPasses(Script &pScript,
+                                  llvm::PassManager &pPM,
+                                  const char *mTriple);
+  bool addInternalizeSymbolsPass(Script &pScript,
+                                 llvm::PassManager &pPM,
+                                 const char *mTriple);
+  bool addExpandForEachPass(Script &pScript,
+                            llvm::PassManager &pPM,
+                            const char *mTriple);
 };
 
 } // end namespace bcc
