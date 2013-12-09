@@ -542,16 +542,17 @@ const char* g_NoInlineBuiltins[] = {
 unsigned int g_NoInlineBuiltinsNum = sizeof(g_NoInlineBuiltins) / sizeof(char*);
 
 /**
- * run vectorizer if debug.rs.x86vectorizer is set.
+ * rs vectorizer is default turned on.
+ * turn off if rs.x86vectorizer.disable is set to 1 or true.
  */
 bool RSVectorizationSupport::isVectorizerEnabled() {
 #ifdef HAVE_ANDROID_OS
   char buf[PROPERTY_VALUE_MAX];
-  property_get("debug.rs.x86vectorizer", buf, "0");
+  property_get("rs.x86vectorizer.disable", buf, "0");
   if ((::strcmp(buf, "1") == 0) || (::strcmp(buf, "true") == 0))
-    return true;
-  else
     return false;
+  else
+    return true;
 #else
   return true;
 #endif
