@@ -27,12 +27,17 @@
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Scalar.h>
+#include <llvm/Target/TargetLibraryInfo.h>
 
 #include "bcc/Script.h"
 #include "bcc/Source.h"
 #include "bcc/Support/CompilerConfig.h"
 #include "bcc/Support/Log.h"
 #include "bcc/Support/OutputFile.h"
+
+#ifdef ARCH_X86_RS_VECTORIZER
+#include "bcc/Renderscript/RSVectorizationSupport.h"
+#endif
 
 using namespace bcc;
 
@@ -163,7 +168,8 @@ enum Compiler::ErrorCode Compiler::runLTO(Script &pScript) {
   lto_passes.add(data_layout);
 
   // Invoke "beforeAddLTOPasses" before adding the first pass.
-  if (!beforeAddLTOPasses(pScript, lto_passes)) {
+  if (!beforeAddLTOPasses(pScript, lto_passes,
+                          mTarget->getTargetTriple().data())) {
     return kErrHookBeforeAddLTOPasses;
   }
 
@@ -207,6 +213,11 @@ enum Compiler::ErrorCode Compiler::runCodeGen(Script &pScript,
     return kErrDataLayoutNoMemory;
   }
 
+  // If compiling for USC, create Target Library Info here to provide it the Triple
+  if (!getTargetMachine().getTargetTriple().compare("usc")) {
+    codegen_passes.add(new llvm::TargetLibraryInfo(llvm::Triple("usc")));
+  }
+
   // Add DataLayout to the pass manager.
   codegen_passes.add(data_layout);
 
@@ -242,6 +253,17 @@ enum Compiler::ErrorCode Compiler::runCodeGen(Script &pScript,
 
   return kSuccess;
 }
+
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+void Compiler::dbgPoint(const char* tag, const char* title) {
+  RSVectorizationSupport::dumpDebugPoint(tag, title);
+}
+
+void Compiler::dumpScript(const char* tag, const char* title, Script &pScript) {
+  llvm::Module& module = pScript.getSource().getModule();
+  RSVectorizationSupport::dumpModule(tag, title, module);
+}
+#endif
 
 enum Compiler::ErrorCode Compiler::compile(Script &pScript,
                                            llvm::raw_ostream &pResult,

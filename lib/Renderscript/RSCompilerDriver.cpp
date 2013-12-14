@@ -20,6 +20,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/PluginLoader.h>
 
 #include "bcinfo/BitcodeWrapper.h"
 
@@ -42,11 +43,15 @@
 #include <utils/String8.h>
 #include <utils/StopWatch.h>
 
+#ifdef ARCH_X86_RS_VECTORIZER
+#include "bcc/Renderscript/RSVectorizationSupport.h"
+#endif
+
 using namespace bcc;
 
 RSCompilerDriver::RSCompilerDriver(bool pUseCompilerRT) :
-    mConfig(NULL), mCompiler(), mCompilerRuntime(NULL), mDebugContext(false),
-    mEnableGlobalMerge(true) {
+    mConfig(NULL), mCompiler(), mDefaultTriple(NULL), mDefaultLibrary(NULL),
+    mCompilerRuntime(NULL), mDebugContext(false), mEnableGlobalMerge(true) {
   init::Initialize();
   // Chain the symbol resolvers for compiler_rt and RS runtimes.
   if (pUseCompilerRT) {
@@ -169,7 +174,10 @@ bool RSCompilerDriver::setupConfig(const RSScript &pScript) {
     }
   } else {
     // Haven't run the compiler ever.
-    mConfig = new (std::nothrow) DefaultCompilerConfig();
+    if (mDefaultTriple) // Preference the default triple if set through setRSDefaultCompilerTriple
+      mConfig = new (std::nothrow) CompilerConfig(mDefaultTriple);
+    else
+      mConfig = new (std::nothrow) DefaultCompilerConfig();
     if (mConfig == NULL) {
       // Return false since mConfig remains NULL and out-of-memory.
       return false;
@@ -204,6 +212,10 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   //android::StopWatch compile_time("bcc: RSCompilerDriver::compileScript time");
   RSInfo *info = NULL;
 
+  if (mDefaultLibrary) {
+	pScript.setPreferredLibrary(mDefaultLibrary);
+  }
+
   //===--------------------------------------------------------------------===//
   // Extract RS-specific information from source bitcode.
   //===--------------------------------------------------------------------===//
@@ -220,6 +232,38 @@ RSCompilerDriver::compileScript(RSScript &pScript,
   // This is required since RS compiler may need information in the info file
   // to do some transformation (e.g., expand foreach-able function.)
   pScript.setInfo(info);
+
+#ifdef ENABLE_VECTORIZATION_SUPPORT
+  //===--------------------------------------------------------------------===//
+  // Setup the config to the compiler.
+  //===--------------------------------------------------------------------===//
+  bool compiler_need_reconfigure = setupConfig(pScript);
+
+  if (mConfig == NULL) {
+    ALOGE("Failed to setup config for RS compiler to compile %s!", pOutputPath);
+    delete info;
+    return Compiler::kErrInvalidSource;
+  }
+
+  // Compiler need to re-config if it's haven't run the config() yet or the
+  // configuration it referenced is changed.
+  if (compiler_need_reconfigure) {
+    Compiler::ErrorCode err = mCompiler.config(*mConfig);
+    if (err != Compiler::kSuccess) {
+      ALOGE("Failed to config the RS compiler for %s! (%s)",pOutputPath,
+            Compiler::GetErrorString(err));
+      delete info;
+      return Compiler::kErrInvalidSource;
+    }
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Perform pre-compilation transformation on the input script bitcode
+  //===--------------------------------------------------------------------===//
+  // This is required in order to make the code suitable for vectorization and
+  // before linking the builtin's implementation to the script bitcode
+  mCompiler.performCodeTransformations(pScript);
+#endif
 
   //===--------------------------------------------------------------------===//
   // Link RS script with Renderscript runtime.
@@ -255,6 +299,7 @@ RSCompilerDriver::compileScript(RSScript &pScript,
       return Compiler::kErrInvalidSource;
     }
 
+#ifndef ENABLE_VECTORIZATION_SUPPORT
     // Setup the config to the compiler.
     bool compiler_need_reconfigure = setupConfig(pScript);
 
@@ -272,6 +317,7 @@ RSCompilerDriver::compileScript(RSScript &pScript,
         return Compiler::kErrInvalidSource;
       }
     }
+#endif
 
     OutputFile *ir_file = NULL;
     llvm::raw_fd_ostream *IRStream = NULL;
@@ -369,8 +415,9 @@ bool RSCompilerDriver::build(BCCContext &pContext,
   //===--------------------------------------------------------------------===//
   llvm::SmallString<80> output_path(pCacheDir);
   llvm::sys::path::append(output_path, pResName);
+#ifdef TARGET_BUILD
   llvm::sys::path::replace_extension(output_path, ".o");
-
+#endif
   dep_info.push(std::make_pair(output_path.c_str(), bitcode_sha1));
 
   //===--------------------------------------------------------------------===//
@@ -416,6 +463,10 @@ bool RSCompilerDriver::build(BCCContext &pContext,
   return true;
 }
 
+void
+RSCompilerDriver::loadPlugin(const char *pLibName) {
+  llvm::PluginLoader() = pLibName;
+}
 
 bool RSCompilerDriver::build(RSScript &pScript, const char *pOut,
                              const char *pRuntimePath) {
