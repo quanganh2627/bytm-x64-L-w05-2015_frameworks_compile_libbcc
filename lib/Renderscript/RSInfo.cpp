@@ -94,16 +94,6 @@ android::String8 RSInfo::GetPath(const char *pFilename) {
   return result;
 }
 
-const char* RSInfo::GetCLCorePath() {
-#if defined(ARCH_X86_HAVE_SSE2)
-  return LibCLCoreX86Path;
-#elif defined(ARCH_ARM_HAVE_NEON)
-  return LibCLCoreNEONPath;
-#else
-  return LibCLCorePath;
-#endif
-}
-
 #define PRINT_DEPENDENCY(PREFIX, N, X) \
         ALOGV("\t" PREFIX "Source name: %s, "                                 \
                           "SHA-1: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x"   \

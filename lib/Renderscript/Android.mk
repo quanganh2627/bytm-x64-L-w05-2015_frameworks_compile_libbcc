@@ -26,6 +26,7 @@ libbcc_renderscript_SRC_FILES := \
   RSCompilerDriver.cpp \
   RSEmbedInfo.cpp \
   RSExecutable.cpp \
+  RSForEachExpand.cpp \
   RSInfo.cpp \
   RSInfoExtractor.cpp \
   RSInfoReader.cpp \
@@ -43,14 +44,6 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 
 LOCAL_SRC_FILES := $(libbcc_renderscript_SRC_FILES)
-
-ifeq ($(TARGET_ARCH),x86) # We don't support x86-64 right now
-  LOCAL_CFLAGS += -DARCH_X86_RS_VECTORIZER
-  LOCAL_SRC_FILES += RSForEachExpand_x86.cpp \
-                     RSVectorizationSupport.cpp
-else
-  LOCAL_SRC_FILES += RSForEachExpand.cpp
-endif
 
 include $(LIBBCC_DEVICE_BUILD_MK)
 include $(LIBBCC_GEN_CONFIG_MK)
@@ -70,10 +63,6 @@ LOCAL_MODULE_CLASS := STATIC_LIBRARIES
 LOCAL_IS_HOST_MODULE := true
 
 LOCAL_SRC_FILES := $(libbcc_renderscript_SRC_FILES)
-
-LOCAL_CFLAGS += -DARCH_X86_RS_VECTORIZER
-LOCAL_SRC_FILES += RSForEachExpand_x86.cpp \
-                   RSVectorizationSupport.cpp
 
 include $(LIBBCC_HOST_BUILD_MK)
 include $(LIBBCC_GEN_CONFIG_MK)

@@ -27,8 +27,6 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/system_error.h>
-#define DONT_GET_PLUGIN_LOADER_OPTION
-#include <llvm/Support/PluginLoader.h>
 
 #include <bcc/BCCContext.h>
 #include <bcc/Compiler.h>
@@ -76,6 +74,9 @@ llvm::cl::opt<bool>
 OptEmitLLVM("emit-llvm",
             llvm::cl::desc("Emit an LLVM-IR version of the generated program"));
 
+#ifdef TARGET_BUILD
+const std::string OptTargetTriple(DEFAULT_TARGET_TRIPLE_STRING);
+#else
 llvm::cl::opt<std::string>
 OptTargetTriple("mtriple",
                 llvm::cl::desc("Specify the target triple (default: "
@@ -86,10 +87,7 @@ OptTargetTriple("mtriple",
 llvm::cl::alias OptTargetTripleC("C", llvm::cl::NotHidden,
                                  llvm::cl::desc("Alias for -mtriple"),
                                  llvm::cl::aliasopt(OptTargetTriple));
-
-llvm::cl::opt<llvm::PluginLoader, false, llvm::cl::parser<std::string> >
-              LoadOpt("plugin", llvm::cl::ZeroOrMore, llvm::cl::value_desc("pluginfilename"),
-              llvm::cl::desc("Load the specified plugin"));
+#endif
 
 //===----------------------------------------------------------------------===//
 // Compiler Options
@@ -125,7 +123,11 @@ bool ConfigCompiler(RSCompilerDriver &pRSCD) {
   RSCompiler *RSC = pRSCD.getCompiler();
   CompilerConfig *config = NULL;
 
+#ifdef TARGET_BUILD
+  config = new (std::nothrow) DefaultCompilerConfig();
+#else
   config = new (std::nothrow) CompilerConfig(OptTargetTriple);
+#endif
   if (config == NULL) {
     llvm::errs() << "Out of memory when create the compiler configuration!\n";
     return false;

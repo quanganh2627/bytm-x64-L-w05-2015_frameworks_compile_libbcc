@@ -16,7 +16,6 @@
 
 #include "bcc/Renderscript/RSCompiler.h"
 
-#include <llvm/ADT/Triple.h>
 #include <llvm/IR/Module.h>
 #include <llvm/PassManager.h>
 #include <llvm/Transforms/IPO.h>
@@ -28,46 +27,9 @@
 #include "bcc/Source.h"
 #include "bcc/Support/Log.h"
 
-#ifdef ARCH_X86_RS_VECTORIZER
-#include "bcc/Renderscript/RSVectorizationSupport.h"
-#endif
-
 using namespace bcc;
 
-bool RSCompiler::performCodeTransformations(Script &pScript) {
-#ifdef ENABLE_VECTORIZATION_SUPPORT
-  if(RSVectorizationSupport::isVectorizerEnabled()) {
-    RSScript &script = static_cast<RSScript &>(pScript);
-    const RSInfo *info = script.getInfo();
-    llvm::Module &module = script.getSource().getModule();
-
-    // Materialize the bitcode module.
-    if (module.getMaterializer() != NULL) {
-      std::string error;
-      // A module with non-null materializer means that it is a lazy-load module.
-      // Materialize it now via invoking MaterializeAllPermanently(). This
-      // function returns false when the materialization is successful.
-      if (module.MaterializeAllPermanently(&error)) {
-        // If we reach this it means something happened with our script or it can't
-        // materialized, so roll-back to the scalar version without any vectorization
-        // changes on the module
-
-        ALOGW("Failed to materialize the module `%s'! (%s)",
-              module.getModuleIdentifier().c_str(), error.c_str());
-        return false;
-      }
-      return RSVectorizationSupport::prepareModuleForVectorization(info, &module);
-    }
-  }
-  return false;
-#else
-  return false;
-#endif
-}
-
-bool RSCompiler::addInternalizeSymbolsPass(Script &pScript,
-                                           llvm::PassManager &pPM,
-                                           const char *mTriple) {
+bool RSCompiler::addInternalizeSymbolsPass(Script &pScript, llvm::PassManager &pPM) {
   // Add a pass to internalize the symbols that don't need to have global
   // visibility.
   RSScript &script = static_cast<RSScript &>(pScript);
@@ -102,9 +64,7 @@ bool RSCompiler::addInternalizeSymbolsPass(Script &pScript,
     export_symbols.push_back(*export_func_iter);
   }
 
-  // If compiling for CPU, expanded foreach functions should not be
-  // internalized, if compiling for PVR, foreach functions should not be
-  // internalized instead, and there is no need to expand them.
+  // Expanded foreach functions should not be internalized, too.
   const RSInfo::ExportForeachFuncListTy &export_foreach_func =
       info->getExportForeachFuncs();
   std::vector<std::string> expanded_foreach_funcs;
@@ -113,11 +73,7 @@ bool RSCompiler::addInternalizeSymbolsPass(Script &pScript,
            foreach_func_end = export_foreach_func.end();
        foreach_func_iter != foreach_func_end; foreach_func_iter++) {
     std::string name(foreach_func_iter->first);
-
-    if (!strncmp(mTriple, llvm::Triple::getArchTypeName(llvm::Triple::usc), 3))
-      expanded_foreach_funcs.push_back(name);
-    else
-      expanded_foreach_funcs.push_back(name.append(".expand"));
+    expanded_foreach_funcs.push_back(name.append(".expand"));
   }
 
   // Need to wait until ForEachExpandList is fully populated to fill in
@@ -131,9 +87,7 @@ bool RSCompiler::addInternalizeSymbolsPass(Script &pScript,
   return true;
 }
 
-bool RSCompiler::addExpandForEachPass(Script &pScript,
-                                      llvm::PassManager &pPM,
-                                      const char *mTriple) {
+bool RSCompiler::addExpandForEachPass(Script &pScript, llvm::PassManager &pPM) {
   // Script passed to RSCompiler must be a RSScript.
   RSScript &script = static_cast<RSScript &>(pScript);
   const RSInfo *info = script.getInfo();
@@ -146,12 +100,8 @@ bool RSCompiler::addExpandForEachPass(Script &pScript,
   }
 
   // Expand ForEach on CPU path to reduce launch overhead.
-
   bool pEnableStepOpt = true;
-
-  // (if not compiling for PVR).
-  if (strncmp(mTriple, llvm::Triple::getArchTypeName(llvm::Triple::usc), 3))
-    pPM.add(createRSForEachExpandPass(info->getExportForeachFuncs(),
+  pPM.add(createRSForEachExpandPass(info->getExportForeachFuncs(),
                                     pEnableStepOpt));
   if (script.getEmbedInfo())
     pPM.add(createRSEmbedInfoPass(info));
@@ -159,13 +109,11 @@ bool RSCompiler::addExpandForEachPass(Script &pScript,
   return true;
 }
 
-bool RSCompiler::beforeAddLTOPasses(Script &pScript,
-                                    llvm::PassManager &pPM,
-                                    const char *mTriple) {
-  if (!addExpandForEachPass(pScript, pPM, mTriple))
+bool RSCompiler::beforeAddLTOPasses(Script &pScript, llvm::PassManager &pPM) {
+  if (!addExpandForEachPass(pScript, pPM))
     return false;
 
-  if (!addInternalizeSymbolsPass(pScript, pPM, mTriple))
+  if (!addInternalizeSymbolsPass(pScript, pPM))
     return false;
 
   return true;

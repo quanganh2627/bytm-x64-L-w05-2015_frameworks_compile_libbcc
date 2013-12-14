@@ -21,12 +21,6 @@ LOCAL_PATH := $(call my-dir)
 LIBBCC_ROOT_PATH := $(LOCAL_PATH)
 include $(LIBBCC_ROOT_PATH)/libbcc.mk
 
-ifeq ($(TARGET_ARCH),x86)
-	include $(CLEAR_VARS)
-	LOCAL_PREBUILT_LIBS :=  ../../../prebuilts/ndk/8/sources/cxx-stl/gnu-libstdc++/libs/x86/libsupc++.a
-	LOCAL_MODULE_TAGS := optional
-	include $(BUILD_MULTI_PREBUILT)
-endif
 #=====================================================================
 # Whole Static Library to Be Linked In
 #=====================================================================
@@ -36,15 +30,6 @@ libbcc_WHOLE_STATIC_LIBRARIES += \
   libbccExecutionEngine \
   libbccCore \
   libbccSupport
-
-rs_vectorizer_STATIC_LIBRARIES := \
-  libpasses \
-  libmetadata_api \
-  libname_mangle \
-  libreflection_module \
-  libLLVMVectorizer
-
-rs_vectorizer_STATIC_LIBRARIES_HOST  := $(addsuffix _host, $(notdir $(rs_vectorizer_STATIC_LIBRARIES)))
 
 #=====================================================================
 # Calculate SHA1 checksum for libbcc.so, libRS.so and libclcore.bc
@@ -98,13 +83,6 @@ LOCAL_WHOLE_STATIC_LIBRARIES := $(libbcc_WHOLE_STATIC_LIBRARIES)
 
 LOCAL_WHOLE_STATIC_LIBRARIES += librsloader
 
-ifeq ($(TARGET_ARCH),x86) # We don't support x86-64 right now
-  LOCAL_WHOLE_STATIC_LIBRARIES += \
-    libsupc++ \
-    $(rs_vectorizer_STATIC_LIBRARIES)
-  LOCAL_CFLAGS += -DARCH_X86_RS_VECTORIZER
-endif
-
 LOCAL_SHARED_LIBRARIES := libbcinfo libLLVM libdl libutils libcutils liblog libstlport
 
 # Modules that need get installed if and only if the target libbcc.so is
@@ -139,11 +117,6 @@ LOCAL_IS_HOST_MODULE := true
 LOCAL_WHOLE_STATIC_LIBRARIES += $(libbcc_WHOLE_STATIC_LIBRARIES)
 
 LOCAL_WHOLE_STATIC_LIBRARIES += librsloader
-
-LOCAL_WHOLE_STATIC_LIBRARIES += \
-  $(rs_vectorizer_STATIC_LIBRARIES_HOST)
-
-LOCAL_CFLAGS += -DARCH_X86_RS_VECTORIZER
 
 LOCAL_STATIC_LIBRARIES += \
   libutils \
