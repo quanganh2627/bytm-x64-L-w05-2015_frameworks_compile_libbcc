@@ -921,8 +921,10 @@ llvm::Function* RSVectorizationSupport::createKernelWrapper(llvm::Function* F,
   return WrapperF;
 }
 
+#if __GNUC__ == 4 && __GNUC_MINOR__ == 7
 #pragma GCC push_options
 #pragma GCC optimize ("-O0")
+#endif
 
 bool RSVectorizationSupport::prepareModuleForVectorization(const RSInfo *info,
   llvm::Module* M) {
@@ -984,7 +986,9 @@ bool RSVectorizationSupport::prepareModuleForVectorization(const RSInfo *info,
   return true;
 }
 
+#if __GNUC__ == 4 && __GNUC_MINOR__ == 7
 #pragma GCC pop_options
+#endif
 
 void RSVectorizationSupport::doFunctionPreOptimizations(llvm::Module* M) {
   llvm::FunctionPassManager fpm = llvm::FunctionPassManager(M);
