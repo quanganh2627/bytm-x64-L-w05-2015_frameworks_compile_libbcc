@@ -21,11 +21,13 @@ LOCAL_PATH := $(call my-dir)
 LIBBCC_ROOT_PATH := $(LOCAL_PATH)
 include $(LIBBCC_ROOT_PATH)/libbcc.mk
 
+ifeq ($(PRODUCT_BRAND),intel)
 ifeq ($(TARGET_ARCH),x86)
 	include $(CLEAR_VARS)
 	LOCAL_PREBUILT_LIBS :=  ../../../prebuilts/ndk/8/sources/cxx-stl/gnu-libstdc++/libs/x86/libsupc++.a
 	LOCAL_MODULE_TAGS := optional
 	include $(BUILD_MULTI_PREBUILT)
+endif
 endif
 #=====================================================================
 # Whole Static Library to Be Linked In
@@ -37,6 +39,8 @@ libbcc_WHOLE_STATIC_LIBRARIES += \
   libbccCore \
   libbccSupport
 
+ifeq ($(PRODUCT_BRAND),intel)
+ifeq ($(TARGET_ARCH),x86)
 rs_vectorizer_STATIC_LIBRARIES := \
   libpasses \
   libmetadata_api \
@@ -45,6 +49,8 @@ rs_vectorizer_STATIC_LIBRARIES := \
   libLLVMVectorizer
 
 rs_vectorizer_STATIC_LIBRARIES_HOST  := $(addsuffix _host, $(notdir $(rs_vectorizer_STATIC_LIBRARIES)))
+endif
+endif
 
 #=====================================================================
 # Calculate SHA1 checksum for libbcc.so, libRS.so and libclcore.bc
@@ -98,11 +104,13 @@ LOCAL_WHOLE_STATIC_LIBRARIES := $(libbcc_WHOLE_STATIC_LIBRARIES)
 
 LOCAL_WHOLE_STATIC_LIBRARIES += librsloader
 
+ifeq ($(PRODUCT_BRAND),intel)
 ifeq ($(TARGET_ARCH),x86) # We don't support x86-64 right now
   LOCAL_WHOLE_STATIC_LIBRARIES += \
     libsupc++ \
     $(rs_vectorizer_STATIC_LIBRARIES)
   LOCAL_CFLAGS += -DARCH_X86_RS_VECTORIZER
+endif
 endif
 
 LOCAL_SHARED_LIBRARIES := libbcinfo libLLVM libdl libutils libcutils liblog libstlport
@@ -140,10 +148,14 @@ LOCAL_WHOLE_STATIC_LIBRARIES += $(libbcc_WHOLE_STATIC_LIBRARIES)
 
 LOCAL_WHOLE_STATIC_LIBRARIES += librsloader
 
+ifeq ($(PRODUCT_BRAND),intel)
+ifeq ($(TARGET_ARCH),x86)
 LOCAL_WHOLE_STATIC_LIBRARIES += \
   $(rs_vectorizer_STATIC_LIBRARIES_HOST)
 
 LOCAL_CFLAGS += -DARCH_X86_RS_VECTORIZER
+endif
+endif
 
 LOCAL_STATIC_LIBRARIES += \
   libutils \
